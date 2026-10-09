@@ -1,0 +1,6 @@
+{
+  "name": "ÚtInfó & Úthiba Rögzítő (OpenStreetMap)",
+  "description": "Valós idejű OpenStreetMap alapú útvonal, sáv és úthiba rögzítő alkalmazás beszédhangos felolvasással és testreszabható műszerfallal.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
