@@ -18,6 +18,7 @@ interface HazardModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (hazard: RoadHazard) => void;
+  onDelete?: (id: string) => void;
   initialHazard: Partial<RoadHazard> | null;
   isEditing?: boolean;
 }
@@ -53,6 +54,7 @@ export const HazardModal: React.FC<HazardModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  onDelete,
   initialHazard,
   isEditing = false,
 }) => {
@@ -62,6 +64,7 @@ export const HazardModal: React.FC<HazardModalProps> = ({
   const [laneNumber, setLaneNumber] = useState<number>(2);
   const [severity, setSeverity] = useState<Severity>('medium');
   const [heading, setHeading] = useState<number>(0);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [notes, setNotes] = useState<string>('');
   const [roadName, setRoadName] = useState<string>('');
   const [roadNumber, setRoadNumber] = useState<string>('');
@@ -483,7 +486,42 @@ export const HazardModal: React.FC<HazardModalProps> = ({
         </div>
 
         {/* Footer Actions with Big Buttons */}
-        <div className="bg-zinc-950 p-4 sm:p-5 border-t border-zinc-800 flex items-center gap-3 shrink-0">
+        <div className="bg-zinc-950 p-4 sm:p-5 border-t border-zinc-800 flex items-center gap-3 shrink-0 flex-wrap">
+          {isEditing && initialHazard?.id && onDelete && (
+            confirmDelete ? (
+              <div className="flex items-center gap-2 p-1 bg-red-950/80 border border-red-500 rounded-2xl">
+                <span className="text-xs font-bold text-red-300 pl-2">Biztosan törlöd?</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (initialHazard.id && onDelete) {
+                      onDelete(initialHazard.id);
+                    }
+                    onClose();
+                  }}
+                  className="py-2.5 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs transition-colors"
+                >
+                  Igen, Törlés
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="py-2.5 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs transition-colors"
+                >
+                  Mégse
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="py-3.5 px-4 rounded-2xl bg-red-950/50 hover:bg-red-900/60 border border-red-700 text-red-300 font-bold text-sm transition-colors flex items-center gap-1.5"
+                title="Úthiba törlése"
+              >
+                🗑️ Törlés
+              </button>
+            )
+          )}
           <button
             type="button"
             onClick={onClose}

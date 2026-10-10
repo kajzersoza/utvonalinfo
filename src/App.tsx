@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   RoadHazard,
   RoadInfo,
   GPSState,
   AppSettings,
+  OSMFeature,
+  OSMFeatureVisibility,
 } from './types';
 import {
   loadSettings,
@@ -11,7 +13,7 @@ import {
   loadHazards,
   saveHazards,
 } from './services/storageService';
-import { fetchOSMRoadInfo, calculateDistanceMeters } from './services/osmService';
+import { fetchOSMRoadInfo, calculateDistanceMeters, SAMPLE_OSM_FEATURES } from './services/osmService';
 import { speechService } from './services/speechService';
 import {
   SIMULATED_ROUTE_M7,
@@ -33,6 +35,7 @@ export default function App() {
   // 1. Persistent State
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [hazards, setHazards] = useState<RoadHazard[]>(() => loadHazards());
+  const [osmFeatures, setOsmFeatures] = useState<OSMFeature[]>(SAMPLE_OSM_FEATURES);
 
   // 2. Navigation State
   const [activeTab, setActiveTab] = useState<'split' | 'cockpit' | 'map' | 'list'>('split');
@@ -41,9 +44,9 @@ export default function App() {
   const [gps, setGps] = useState<GPSState>({
     latitude: 47.4762,
     longitude: 19.0285,
-    heading: 240,
-    speed: 55,
-    accuracy: 5,
+    heading: 238,
+    speed: 52,
+    accuracy: 4,
     timestamp: Date.now(),
     status: 'locating',
   });
@@ -51,6 +54,7 @@ export default function App() {
   const [roadInfo, setRoadInfo] = useState<RoadInfo>({
     roadNumber: '7',
     roadName: 'Budaörsi út',
+    houseNumber: '112.',
     city: 'Budapest XI. kerület',
     postcode: '1118',
     lanes: 3,
@@ -119,6 +123,19 @@ export default function App() {
     },
     [hazards, settings.voiceOptions]
   );
+
+  // -------------------------------------------------------------
+  // Nearby OSM Road Features (Crossing, Traffic Signals, Railway, Signs)
+  // -------------------------------------------------------------
+  const nearbyOsmFeatures = useMemo(() => {
+    return osmFeatures
+      .map((f) => ({
+        feature: f,
+        distance: calculateDistanceMeters(gps.latitude, gps.longitude, f.latitude, f.longitude),
+      }))
+      .filter(({ distance }) => distance <= 350)
+      .sort((a, b) => a.distance - b.distance);
+  }, [osmFeatures, gps.latitude, gps.longitude]);
 
   // -------------------------------------------------------------
   // Real GPS Geolocation Watcher
@@ -240,6 +257,7 @@ export default function App() {
       const simulatedRoad: RoadInfo = {
         roadNumber: pt.roadNumber,
         roadName: pt.roadName,
+        houseNumber: pt.houseNumber,
         city: pt.city,
         postcode: pt.postcode,
         lanes: pt.lanes,
@@ -289,6 +307,7 @@ export default function App() {
     setRoadInfo({
       roadNumber: pt.roadNumber,
       roadName: pt.roadName,
+      houseNumber: pt.houseNumber,
       city: pt.city,
       postcode: pt.postcode,
       lanes: pt.lanes,
@@ -330,45 +349,90 @@ export default function App() {
     setIsHazardModalOpen(true);
   };
 
-  // Add Hazard from Map Click
-  const handleAddHazardAtLocation = (lat: number, lon: number, heading: number) => {
-    const snapshot: Partial<RoadHazard> = {
-      latitude: lat,
-      longitude: lon,
-      heading: heading || 0,
-      speed: 0,
-      accuracy: 5,
-      roadNumber: roadInfo.roadNumber,
-      roadName: roadInfo.roadName || 'Kijelölt útszakasz',
-      city: roadInfo.city || 'Térképről rögzítve',
-      postcode: roadInfo.postcode,
-      laneCount: roadInfo.lanes || 2,
-      lateralPosition: 'center',
-      laneNumber: 1,
-      hazardType: 'pothole',
-      severity: 'medium',
-      timestamp: Date.now(),
-    };
+  // Add Hazard from Map Click with async OSM reverse geocoding
+  const handleAddHazardAtLocation = useCallback(
+    async (lat: number, lon: number, heading: number) => {
+      let rName = roadInfo.roadName || 'Kijelölt útszakasz';
+      let rNum = roadInfo.roadNumber || '';
+      let rCity = roadInfo.city || 'Térképről rögzítve';
+      let rPostcode = roadInfo.postcode || '';
+      let rLanes = roadInfo.lanes || 2;
 
-    setModalInitialHazard(snapshot);
-    setIsEditingHazard(false);
-    setIsHazardModalOpen(true);
-  };
+      try {
+        const osm = await fetchOSMRoadInfo(lat, lon);
+        if (osm.roadName) rName = osm.roadName;
+        if (osm.roadNumber) rNum = osm.roadNumber;
+        if (osm.city) rCity = osm.city;
+        if (osm.postcode) rPostcode = osm.postcode;
+        if (osm.lanes) rLanes = osm.lanes;
+      } catch {
+        // Fallback to current roadInfo
+      }
+
+      const snapshot: Partial<RoadHazard> = {
+        latitude: lat,
+        longitude: lon,
+        heading: heading || 0,
+        speed: 0,
+        accuracy: 5,
+        roadNumber: rNum,
+        roadName: rName,
+        city: rCity,
+        postcode: rPostcode,
+        laneCount: rLanes,
+        lateralPosition: 'center',
+        laneNumber: 1,
+        hazardType: 'pothole',
+        severity: 'medium',
+        timestamp: Date.now(),
+      };
+
+      setModalInitialHazard(snapshot);
+      setIsEditingHazard(false);
+      setIsHazardModalOpen(true);
+    },
+    [roadInfo]
+  );
 
   // Edit Existing Hazard
-  const handleEditHazard = (hazard: RoadHazard) => {
+  const handleEditHazard = useCallback((hazard: RoadHazard) => {
     setModalInitialHazard(hazard);
     setIsEditingHazard(true);
     setIsHazardModalOpen(true);
-  };
+  }, []);
 
   // Delete Hazard
-  const handleDeleteHazard = (id: string) => {
+  const handleDeleteHazard = useCallback((id: string) => {
     setHazards((prev) => prev.filter((h) => h.id !== id));
-  };
+  }, []);
+
+  // Update Hazard Position (Drag-and-Drop on Map)
+  const handleUpdateHazardPosition = useCallback((id: string, lat: number, lon: number) => {
+    setHazards((prev) =>
+      prev.map((h) => (h.id === id ? { ...h, latitude: lat, longitude: lon } : h))
+    );
+  }, []);
+
+  // Update Hazard Heading (Rotation on Map)
+  const handleUpdateHazardHeading = useCallback((id: string, heading: number) => {
+    setHazards((prev) =>
+      prev.map((h) => (h.id === id ? { ...h, heading: (heading % 360 + 360) % 360 } : h))
+    );
+  }, []);
+
+  // Toggle OSM Feature Visibility
+  const handleToggleOsmFeatureVisibility = useCallback((key: keyof OSMFeatureVisibility) => {
+    setSettings((prev) => ({
+      ...prev,
+      osmFeatures: {
+        ...prev.osmFeatures,
+        [key]: !prev.osmFeatures[key],
+      },
+    }));
+  }, []);
 
   // Save (Create or Update) Hazard
-  const handleSaveHazard = (savedHazard: RoadHazard) => {
+  const handleSaveHazard = useCallback((savedHazard: RoadHazard) => {
     setHazards((prev) => {
       const existingIdx = prev.findIndex((h) => h.id === savedHazard.id);
       if (existingIdx >= 0) {
@@ -387,17 +451,7 @@ export default function App() {
         settings.voiceOptions
       );
     }
-  };
-
-  const handleUpdateWarningDistance = (meters: number) => {
-    setSettings((prev) => ({
-      ...prev,
-      voiceOptions: {
-        ...prev.voiceOptions,
-        hazardWarningDistanceMeters: meters,
-      },
-    }));
-  };
+  }, [settings.voiceOptions]);
 
   const handleToggleVoice = () => {
     setSettings((prev) => ({
@@ -424,7 +478,7 @@ export default function App() {
         isDark ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-900'
       }`}
     >
-      {/* 1. Header Bar */}
+      {/* 1. Header Bar with Sound icon right next to theme toggle */}
       <Header
         settings={settings}
         gps={gps}
@@ -432,6 +486,7 @@ export default function App() {
         onChangeTab={setActiveTab}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onToggleTheme={handleToggleTheme}
+        onToggleVoice={handleToggleVoice}
         hazardCount={hazards.length}
         simulatorControls={
           <SimulatorControls
@@ -464,10 +519,9 @@ export default function App() {
                 gps={gps}
                 settings={settings}
                 approachingHazards={approachingHazards}
+                nearbyOsmFeatures={nearbyOsmFeatures}
                 onTriggerRecordHazard={handleTriggerRecordHazard}
-                onToggleVoice={handleToggleVoice}
                 onOpenSettings={() => setIsSettingsOpen(true)}
-                onUpdateWarningDistance={handleUpdateWarningDistance}
               />
             </div>
 
@@ -477,9 +531,15 @@ export default function App() {
                 key="split-map"
                 gps={gps}
                 hazards={hazards}
+                osmFeatures={osmFeatures}
+                osmFeatureVisibility={settings.osmFeatures}
+                onToggleOsmFeatureVisibility={handleToggleOsmFeatureVisibility}
                 onAddHazardAtLocation={handleAddHazardAtLocation}
+                onSaveHazard={handleSaveHazard}
                 onEditHazard={handleEditHazard}
                 onDeleteHazard={handleDeleteHazard}
+                onUpdateHazardPosition={handleUpdateHazardPosition}
+                onUpdateHazardHeading={handleUpdateHazardHeading}
                 theme={settings.theme}
               />
             </div>
@@ -494,10 +554,9 @@ export default function App() {
               gps={gps}
               settings={settings}
               approachingHazards={approachingHazards}
+              nearbyOsmFeatures={nearbyOsmFeatures}
               onTriggerRecordHazard={handleTriggerRecordHazard}
-              onToggleVoice={handleToggleVoice}
               onOpenSettings={() => setIsSettingsOpen(true)}
-              onUpdateWarningDistance={handleUpdateWarningDistance}
             />
           </div>
         )}
@@ -509,9 +568,15 @@ export default function App() {
               key="full-map"
               gps={gps}
               hazards={hazards}
+              osmFeatures={osmFeatures}
+              osmFeatureVisibility={settings.osmFeatures}
+              onToggleOsmFeatureVisibility={handleToggleOsmFeatureVisibility}
               onAddHazardAtLocation={handleAddHazardAtLocation}
+              onSaveHazard={handleSaveHazard}
               onEditHazard={handleEditHazard}
               onDeleteHazard={handleDeleteHazard}
+              onUpdateHazardPosition={handleUpdateHazardPosition}
+              onUpdateHazardHeading={handleUpdateHazardHeading}
               theme={settings.theme}
             />
           </div>
@@ -586,6 +651,7 @@ export default function App() {
         isOpen={isHazardModalOpen}
         onClose={() => setIsHazardModalOpen(false)}
         onSave={handleSaveHazard}
+        onDelete={handleDeleteHazard}
         initialHazard={modalInitialHazard}
         isEditing={isEditingHazard}
       />

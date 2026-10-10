@@ -1,8 +1,8 @@
-import { RoadInfo } from '../types';
-
 interface NominatimResponse {
   address?: {
     road?: string;
+    house_number?: string;
+    housenumber?: string;
     pedestrian?: string;
     highway?: string;
     footway?: string;
@@ -28,6 +28,31 @@ interface NominatimResponse {
   };
   display_name?: string;
 }
+
+import { RoadInfo, OSMFeature } from '../types';
+
+export const SAMPLE_OSM_FEATURES: OSMFeature[] = [
+  // Gyalogátkelőhelyek (Crossings)
+  { id: 'osm-f-1', type: 'crossing', name: 'Zebra gyalogátkelőhely', latitude: 47.4750, longitude: 19.0260, description: 'Felfestett gyalogátkelő sárga villogóval' },
+  { id: 'osm-f-2', type: 'crossing', name: 'Gyalogos átkelő', latitude: 47.4710, longitude: 19.0170, description: 'Gyalogos átkelőhely megállónál' },
+  { id: 'osm-f-3', type: 'crossing', name: 'Zebra gyalogátkelő', latitude: 47.4955, longitude: 19.0407, description: 'Gyalogátkelőhely Fő utcán' },
+  { id: 'osm-f-4', type: 'crossing', name: 'Batthyány téri zebra', latitude: 47.5015, longitude: 19.0395, description: 'Frekventált gyalogátkelőhely' },
+
+  // Jelzőlámpák (Traffic signals)
+  { id: 'osm-f-5', type: 'traffic_signals', name: 'Forgalmi jelzőlámpa', latitude: 47.4735, longitude: 19.0225, description: 'Budaörsi út csomóponti jelzőlámpa' },
+  { id: 'osm-f-6', type: 'traffic_signals', name: 'Sasadi út jelzőlámpa', latitude: 47.4660, longitude: 19.0050, description: 'Torkolati jelzőlámpa kanyarodó sávval' },
+  { id: 'osm-f-7', type: 'traffic_signals', name: 'Belvárosi jelzőlámpa', latitude: 47.4930, longitude: 19.0409, description: 'Gyalogos- és járműirányító lámpa' },
+
+  // Vasúti átjárók (Railway level crossings)
+  { id: 'osm-f-8', type: 'railway', name: 'Vasúti átjáró fénysorompóval', latitude: 47.4410, longitude: 18.9220, description: 'Vasúti szintbeli kereszteződés sorompóval' },
+  { id: 'osm-f-9', type: 'railway', name: 'Iparvágány vasúti átkelő', latitude: 47.1910, longitude: 18.2550, description: 'Vasúti szintbeli átjáró Várpalota' },
+
+  // Közlekedési táblák (Traffic signs)
+  { id: 'osm-f-10', type: 'traffic_sign', name: 'Sebességkorlátozás 70 km/h', latitude: 47.4680, longitude: 19.0100, description: 'Megengedett legnagyobb sebesség 70', speedLimit: 70 },
+  { id: 'osm-f-11', type: 'traffic_sign', name: 'Sebességkorlátozás 50 km/h', latitude: 47.4960, longitude: 19.0405, description: 'Lakott terület sebességkorlátozás 50', speedLimit: 50 },
+  { id: 'osm-f-12', type: 'traffic_sign', name: 'Autópálya kezdete (130 km/h)', latitude: 47.4610, longitude: 18.9900, description: 'M7 autópálya matrica ellenőrzés', speedLimit: 130 },
+  { id: 'osm-f-13', type: 'traffic_sign', name: 'Elsőbbségadás kötelező', latitude: 47.5040, longitude: 19.0390, description: 'Mackósajt tábla csomópontban' },
+];
 
 // In-memory cache for reverse geocode coordinates
 interface CacheEntry {
@@ -169,6 +194,7 @@ export async function fetchOSMRoadInfo(lat: number, lon: number): Promise<RoadIn
       'Ismeretlen település';
 
     const postcode = address.postcode || '';
+    const houseNumber = address.house_number || address.housenumber || '';
     const roadNumber = extractRoadNumber(data, roadName);
     const lanes = estimateDirectionalLanes(data);
     const maxspeed = data.extratags?.maxspeed ? parseInt(data.extratags.maxspeed, 10) : undefined;
@@ -176,6 +202,7 @@ export async function fetchOSMRoadInfo(lat: number, lon: number): Promise<RoadIn
     const roadInfo: RoadInfo = {
       roadNumber,
       roadName,
+      houseNumber: houseNumber ? `${houseNumber}.` : undefined,
       city,
       postcode,
       suburb: address.suburb || address.city_district,

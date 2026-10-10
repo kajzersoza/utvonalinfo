@@ -8,6 +8,7 @@ export interface RoutePoint {
   speed: number; // km/h
   roadName: string;
   roadNumber: string;
+  houseNumber?: string; // Házszám menetirány szerint
   city: string;
   postcode: string;
   lanes: number; // Menetirány szerinti sávok száma
@@ -15,10 +16,10 @@ export interface RoutePoint {
 
 // Preset Route 1: Budapest Budaörsi út -> M7 Autópálya (3-4 sáv menetirány szerint)
 export const SIMULATED_ROUTE_M7: RoutePoint[] = [
-  { lat: 47.4762, lon: 19.0285, heading: 238, speed: 52, roadName: 'Budaörsi út', roadNumber: '7', city: 'Budapest XI. kerület', postcode: '1118', lanes: 3 },
-  { lat: 47.4725, lon: 19.0205, heading: 242, speed: 60, roadName: 'Budaörsi út', roadNumber: '7', city: 'Budapest XI. kerület', postcode: '1118', lanes: 3 },
-  { lat: 47.4695, lon: 19.0142, heading: 245, speed: 65, roadName: 'Budaörsi út (M1-M7 közös szakasz)', roadNumber: 'M1 / M7', city: 'Budapest XI. kerület', postcode: '1118', lanes: 4 },
-  { lat: 47.4645, lon: 19.0012, heading: 248, speed: 78, roadName: 'Budaörsi út kivezető', roadNumber: 'M7', city: 'Budapest XI. kerület', postcode: '1118', lanes: 3 },
+  { lat: 47.4762, lon: 19.0285, heading: 238, speed: 52, roadName: 'Budaörsi út', roadNumber: '7', houseNumber: '112.', city: 'Budapest XI. kerület', postcode: '1118', lanes: 3 },
+  { lat: 47.4725, lon: 19.0205, heading: 242, speed: 60, roadName: 'Budaörsi út', roadNumber: '7', houseNumber: '138.', city: 'Budapest XI. kerület', postcode: '1118', lanes: 3 },
+  { lat: 47.4695, lon: 19.0142, heading: 245, speed: 65, roadName: 'Budaörsi út (M1-M7 közös szakasz)', roadNumber: 'M1 / M7', houseNumber: '162.', city: 'Budapest XI. kerület', postcode: '1118', lanes: 4 },
+  { lat: 47.4645, lon: 19.0012, heading: 248, speed: 78, roadName: 'Budaörsi út kivezető', roadNumber: 'M7', houseNumber: '186.', city: 'Budapest XI. kerület', postcode: '1118', lanes: 3 },
   { lat: 47.4582, lon: 18.9814, heading: 250, speed: 92, roadName: 'M7 Autópálya', roadNumber: 'M7', city: 'Budaörs', postcode: '2040', lanes: 3 },
   { lat: 47.4532, lon: 18.9645, heading: 248, speed: 105, roadName: 'M7 Autópálya', roadNumber: 'M7', city: 'Budaörs', postcode: '2040', lanes: 3 },
   { lat: 47.4489, lon: 18.9482, heading: 248, speed: 118, roadName: 'M7 Autópálya', roadNumber: 'M7', city: 'Törökbálint', postcode: '2045', lanes: 3 },
@@ -29,12 +30,12 @@ export const SIMULATED_ROUTE_M7: RoutePoint[] = [
 
 // Preset Route 2: Budapest Belváros (Fő utca / Duna-part) - 1 sáv menetirány szerint!
 export const SIMULATED_ROUTE_CITY: RoutePoint[] = [
-  { lat: 47.4920, lon: 19.0410, heading: 5, speed: 35, roadName: 'Apród utca', roadNumber: '', city: 'Budapest I. kerület', postcode: '1013', lanes: 1 },
-  { lat: 47.4950, lon: 19.0408, heading: 10, speed: 42, roadName: 'Fő utca', roadNumber: '', city: 'Budapest I. kerület', postcode: '1011', lanes: 1 },
-  { lat: 47.4979, lon: 19.0402, heading: 18, speed: 38, roadName: 'Fő utca', roadNumber: '', city: 'Budapest I. kerület', postcode: '1011', lanes: 1 },
-  { lat: 47.5020, lon: 19.0392, heading: 22, speed: 45, roadName: 'Fő utca (Batthyány tér)', roadNumber: '', city: 'Budapest I. kerület', postcode: '1011', lanes: 1 },
-  { lat: 47.5080, lon: 19.0380, heading: 15, speed: 48, roadName: 'Bem rakpart', roadNumber: '', city: 'Budapest II. kerület', postcode: '1027', lanes: 1 },
-  { lat: 47.5140, lon: 19.0370, heading: 8, speed: 50, roadName: 'Árpád fejedelem útja', roadNumber: '', city: 'Budapest II. kerület', postcode: '1023', lanes: 2 },
+  { lat: 47.4920, lon: 19.0410, heading: 5, speed: 35, roadName: 'Apród utca', roadNumber: '', houseNumber: '4.', city: 'Budapest I. kerület', postcode: '1013', lanes: 1 },
+  { lat: 47.4950, lon: 19.0408, heading: 10, speed: 42, roadName: 'Fő utca', roadNumber: '', houseNumber: '14.', city: 'Budapest I. kerület', postcode: '1011', lanes: 1 },
+  { lat: 47.4979, lon: 19.0402, heading: 18, speed: 38, roadName: 'Fő utca', roadNumber: '', houseNumber: '28.', city: 'Budapest I. kerület', postcode: '1011', lanes: 1 },
+  { lat: 47.5020, lon: 19.0392, heading: 22, speed: 45, roadName: 'Fő utca (Batthyány tér)', roadNumber: '', houseNumber: '46.', city: 'Budapest I. kerület', postcode: '1011', lanes: 1 },
+  { lat: 47.5080, lon: 19.0380, heading: 15, speed: 48, roadName: 'Bem rakpart', roadNumber: '', houseNumber: '22.', city: 'Budapest II. kerület', postcode: '1027', lanes: 1 },
+  { lat: 47.5140, lon: 19.0370, heading: 8, speed: 50, roadName: 'Árpád fejedelem útja', roadNumber: '', houseNumber: '10.', city: 'Budapest II. kerület', postcode: '1023', lanes: 2 },
 ];
 
 // Preset Route 3: 8-as Főút (Veszprém felé) - 1 sáv menetirány szerint!

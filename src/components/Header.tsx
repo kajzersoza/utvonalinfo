@@ -13,15 +13,18 @@ import {
   Navigation,
   Car,
   Split,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 
 interface HeaderProps {
   settings: AppSettings;
   gps: GPSState;
-  activeTab: 'cockpit' | 'map' | 'list' | 'split';
-  onChangeTab: (tab: 'cockpit' | 'map' | 'list' | 'split') => void;
+  activeTab: 'split' | 'cockpit' | 'map' | 'list';
+  onChangeTab: (tab: 'split' | 'cockpit' | 'map' | 'list') => void;
   onOpenSettings: () => void;
   onToggleTheme: () => void;
+  onToggleVoice: () => void;
   hazardCount: number;
   simulatorControls: React.ReactNode;
 }
@@ -33,6 +36,7 @@ export const Header: React.FC<HeaderProps> = ({
   onChangeTab,
   onOpenSettings,
   onToggleTheme,
+  onToggleVoice,
   hazardCount,
   simulatorControls,
 }) => {
@@ -142,6 +146,30 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2">
           {/* Simulator controls */}
           <div className="hidden sm:block">{simulatorControls}</div>
+
+          {/* Sound / Voice toggle right next to theme toggle */}
+          <button
+            type="button"
+            onClick={onToggleVoice}
+            className={`p-2.5 rounded-2xl border transition-colors ${
+              settings.voiceOptions.enabled
+                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30'
+                : isDark
+                ? 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300'
+                : 'bg-zinc-100 border-zinc-200 text-zinc-400 hover:text-zinc-700'
+            }`}
+            title={
+              settings.voiceOptions.enabled
+                ? 'Hangos bemondás aktív (Kattints a némításhoz)'
+                : 'Hang némítva (Kattints a bekapcsoláshoz)'
+            }
+          >
+            {settings.voiceOptions.enabled ? (
+              <Volume2 className="w-5 h-5 text-emerald-400" />
+            ) : (
+              <VolumeX className="w-5 h-5 text-zinc-400" />
+            )}
+          </button>
 
           {/* Theme switch */}
           <button

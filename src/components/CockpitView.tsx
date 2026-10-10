@@ -1,15 +1,12 @@
 import React from 'react';
-import { RoadInfo, GPSState, RoadHazard, AppSettings } from '../types';
+import { RoadInfo, GPSState, RoadHazard, AppSettings, OSMFeature } from '../types';
 import { getCardinalDirectionShort } from '../services/geoService';
 import { getHazardNameHungarian } from '../services/speechService';
 import {
   AlertOctagon,
-  Volume2,
-  VolumeX,
   Compass,
   Gauge,
   ArrowUp,
-  SlidersHorizontal,
 } from 'lucide-react';
 
 interface CockpitViewProps {
@@ -17,25 +14,20 @@ interface CockpitViewProps {
   gps: GPSState;
   settings: AppSettings;
   approachingHazards: { hazard: RoadHazard; distance: number }[];
+  nearbyOsmFeatures?: { feature: OSMFeature; distance: number }[];
   onTriggerRecordHazard: () => void;
-  onToggleVoice: () => void;
   onOpenSettings: () => void;
-  onUpdateWarningDistance: (meters: number) => void;
 }
-
-const DISTANCE_PRESETS = [100, 200, 300, 500, 1000];
 
 export const CockpitView: React.FC<CockpitViewProps> = ({
   roadInfo,
   gps,
   settings,
   approachingHazards,
+  nearbyOsmFeatures = [],
   onTriggerRecordHazard,
-  onToggleVoice,
-  onOpenSettings,
-  onUpdateWarningDistance,
 }) => {
-  const { displayOptions, voiceOptions, theme } = settings;
+  const { displayOptions, theme } = settings;
   const isDark = theme === 'dark';
 
   const isHighway = roadInfo.roadNumber.toUpperCase().startsWith('M');
@@ -70,69 +62,20 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
             : 'bg-white border-zinc-200 text-zinc-900'
         }`}
       >
-        {/* Top Header Row: Road Number Badge, Warning Distance Selector & Voice Toggle */}
-        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-          {/* Road number badge */}
-          <div className="flex items-center gap-2">
-            {displayOptions.showRoadNumber && roadInfo.roadNumber && (
-              <div
-                className={`px-3 py-1 rounded-xl font-black text-sm sm:text-base tracking-wider shadow-md ${
-                  isHighway
-                    ? 'bg-blue-600 text-white ring-2 ring-blue-400'
-                    : 'bg-emerald-600 text-white ring-2 ring-emerald-400'
-                }`}
-              >
-                {roadInfo.roadNumber}
-              </div>
-            )}
-
-            {/* Quick Warning Distance Selector: "lehessen kiválasztani hogy mennyi távolságra előre figyelmeztessen" */}
-            <div className="flex items-center gap-1 bg-zinc-950/70 border border-zinc-700/80 p-1 rounded-xl text-[11px] font-bold">
-              <span className="text-zinc-400 px-1.5 hidden sm:inline">Előrejelzés:</span>
-              {DISTANCE_PRESETS.map((meters) => (
-                <button
-                  key={meters}
-                  type="button"
-                  onClick={() => onUpdateWarningDistance(meters)}
-                  className={`px-2 py-0.5 rounded-lg transition-all ${
-                    voiceOptions.hazardWarningDistanceMeters === meters
-                      ? 'bg-red-600 text-white shadow-sm font-black'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-                  }`}
-                  title={`Figyelmeztetés ${meters} méterrel a hiba előtt`}
-                >
-                  {meters}m
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Voice Audio Toggle */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onToggleVoice}
-              className={`p-2 rounded-xl border transition-colors flex items-center gap-1.5 text-xs font-bold ${
-                voiceOptions.enabled
-                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30'
-                  : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-750'
+        {/* Top Badges Row: Road number badge if present */}
+        {displayOptions.showRoadNumber && roadInfo.roadNumber && (
+          <div className="mb-2">
+            <span
+              className={`px-3.5 py-1 rounded-xl font-black text-sm sm:text-base tracking-wider shadow-md inline-block ${
+                isHighway
+                  ? 'bg-blue-600 text-white ring-2 ring-blue-400'
+                  : 'bg-emerald-600 text-white ring-2 ring-emerald-400'
               }`}
-              title={voiceOptions.enabled ? 'Hangos bemondás aktív' : 'Hang némítva'}
             >
-              {voiceOptions.enabled ? (
-                <>
-                  <Volume2 className="w-4 h-4 text-emerald-400" />
-                  <span className="hidden sm:inline">Hangos</span>
-                </>
-              ) : (
-                <>
-                  <VolumeX className="w-4 h-4 text-zinc-400" />
-                  <span className="hidden sm:inline">Néma</span>
-                </>
-              )}
-            </button>
+              {roadInfo.roadNumber}
+            </span>
           </div>
-        </div>
+        )}
 
         {/* POSTAL CODE AND CITY IN ONE LINE, NO POSITION ICON, LARGER FONT (User Request) */}
         {displayOptions.showCity && (
@@ -142,21 +85,96 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
           </div>
         )}
 
-        {/* Street Name (Big prominent Driver typography) */}
+        {/* Street Name + House Number (menetirány szerinti házszám) */}
         {displayOptions.showStreet && (
-          <div className="mt-1">
-            <h1 className="font-extrabold text-xl sm:text-2xl md:text-3xl tracking-tight leading-tight line-clamp-2">
+          <div className="mt-1 flex items-baseline gap-2 flex-wrap">
+            <h1 className="font-extrabold text-xl sm:text-2xl md:text-3xl tracking-tight leading-tight">
               {roadInfo.roadName || 'Jelenlegi útszakasz keresése...'}
             </h1>
+            {roadInfo.houseNumber && (
+              <span className="text-xl sm:text-2xl md:text-3xl font-black text-cyan-400">
+                {roadInfo.houseNumber}
+              </span>
+            )}
           </div>
         )}
       </div>
 
+      {/* 2. Permanent Fixed-Height HUD Strip for OSM Features (Zero layout shift / Sávinfo nem ugrál) */}
+      <div className="w-full h-12 sm:h-14 flex items-center justify-between gap-2 shrink-0">
+        <div className="grid grid-cols-4 gap-2 sm:gap-3 w-full h-full">
+          {[
+            {
+              id: 'crossing',
+              icon: '🚶',
+              label: 'Gyalogátkelőhely',
+              match: nearbyOsmFeatures.find((f) => f.feature.type === 'crossing'),
+              activeColor: 'bg-blue-600/35 border-blue-400 text-blue-300 ring-2 ring-blue-500/50',
+              badgeColor: 'bg-blue-600 text-white',
+            },
+            {
+              id: 'traffic_signals',
+              icon: '🚦',
+              label: 'Jelzőlámpa',
+              match: nearbyOsmFeatures.find((f) => f.feature.type === 'traffic_signals'),
+              activeColor: 'bg-emerald-600/35 border-emerald-400 text-emerald-300 ring-2 ring-emerald-500/50',
+              badgeColor: 'bg-emerald-600 text-white',
+            },
+            {
+              id: 'railway',
+              icon: '🚂',
+              label: 'Vasúti átjáró',
+              match: nearbyOsmFeatures.find((f) => f.feature.type === 'railway'),
+              activeColor: 'bg-amber-600/35 border-amber-400 text-amber-300 ring-2 ring-amber-500/50',
+              badgeColor: 'bg-amber-500 text-black',
+            },
+            {
+              id: 'traffic_sign',
+              icon: '🛑',
+              label: 'Közlekedési tábla',
+              match: nearbyOsmFeatures.find((f) => f.feature.type === 'traffic_sign'),
+              activeColor: 'bg-red-600/35 border-red-400 text-red-300 ring-2 ring-red-500/50',
+              badgeColor: 'bg-red-600 text-white',
+            },
+          ].map((item) => {
+            const isActive = !!item.match;
+            const dist = item.match ? Math.round(item.match.distance) : null;
+            return (
+              <div
+                key={item.id}
+                className={`h-full rounded-2xl border flex items-center justify-center transition-all duration-200 relative select-none ${
+                  isActive
+                    ? `${item.activeColor} shadow-md shadow-black/30 scale-102 animate-pulse`
+                    : isDark
+                    ? 'bg-zinc-900/40 border-zinc-800/60 opacity-30 grayscale'
+                    : 'bg-zinc-200/50 border-zinc-300/60 opacity-35 grayscale'
+                }`}
+                title={item.label}
+              >
+                {/* Bigger Icon as requested */}
+                <span className="text-2xl sm:text-3xl leading-none">
+                  {item.icon}
+                </span>
+
+                {/* Distance Badge if approaching */}
+                {isActive && dist !== null && (
+                  <span
+                    className={`absolute -bottom-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-black font-mono shadow-sm leading-none ${item.badgeColor}`}
+                  >
+                    {dist}m
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* 2. Lane Information Display (Sáv Információ) & Cockpit Warning Graphic */}
-      {/* User Request: "a figyelmeztetés maga a sáv legyen és abban jelenjen meg a hiba típusa és pozíciója" */}
+      {/* User Request: the redundant text row is completely removed; the lane itself is the warning! */}
       {displayOptions.showLaneInfo && (
         <div
-          className={`rounded-3xl p-4 sm:p-5 border shadow-xl flex flex-col justify-between transition-colors ${
+          className={`rounded-3xl p-3 sm:p-4 border shadow-xl flex flex-col justify-center transition-colors ${
             activeWarning
               ? 'bg-zinc-950 border-red-500/80 ring-2 ring-red-500/30'
               : isDark
@@ -164,23 +182,6 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
               : 'bg-white border-zinc-200 text-zinc-900'
           }`}
         >
-          {/* Header of Lane block */}
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black tracking-wider uppercase text-zinc-400">
-                Sáv Információ (Menetirány szerint)
-              </span>
-              {activeWarning && (
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-red-600 text-white animate-pulse">
-                  VESZÉLY A SÁVODBAN!
-                </span>
-              )}
-            </div>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-600/20 text-blue-400 border border-blue-500/30">
-              {directionalLanes} Menetirányú Sáv
-            </span>
-          </div>
-
           {/* ASPHALT ROAD & LANE DISPLAY WHERE THE LANE ITSELF IS THE WARNING */}
           <div className="bg-zinc-950 p-2.5 sm:p-4 rounded-2xl border-2 border-zinc-800 flex flex-col justify-center min-h-[140px] sm:min-h-[155px] relative overflow-hidden">
             {/* Outer road edge markings */}

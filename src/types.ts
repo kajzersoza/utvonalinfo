@@ -1,5 +1,5 @@
 /**
- * Types for Road Hazard, OpenStreetMap Road Data and Cockpit state
+ * Types for Road Hazard, OpenStreetMap Road Data, OSM Features and Cockpit state
  */
 
 export type HazardType =
@@ -28,13 +28,32 @@ export interface RoadHazard {
   roadName: string; // pl. "Budaörsi út"
   city: string; // pl. "Budapest XI. kerület"
   postcode: string; // pl. "1118"
-  laneCount: number; // Sávok száma (1-6)
+  laneCount: number; // Menetirány szerinti sávok száma (1-6)
   lateralPosition: LateralPosition; // 'left' (bal) | 'center' (közép) | 'right' (jobb)
-  laneNumber: number; // Melyik sávban van (1 = legbelső/legszélső, standard 1-től)
+  laneNumber: number; // Melyik sávban van a menetirányban (1 = legbelső)
   hazardType: HazardType;
   severity: Severity;
   notes?: string;
   resolved?: boolean;
+}
+
+export type OSMFeatureType = 'crossing' | 'railway' | 'traffic_signals' | 'traffic_sign';
+
+export interface OSMFeature {
+  id: string;
+  type: OSMFeatureType;
+  name: string;
+  latitude: number;
+  longitude: number;
+  description?: string;
+  speedLimit?: number;
+}
+
+export interface OSMFeatureVisibility {
+  showCrossings: boolean; // Gyalogátkelőhelyek
+  showRailways: boolean; // Vasúti átjárók
+  showTrafficSignals: boolean; // Jelzőlámpák
+  showTrafficSigns: boolean; // Közlekedési táblák
 }
 
 export interface GPSState {
@@ -51,10 +70,11 @@ export interface GPSState {
 export interface RoadInfo {
   roadNumber: string; // pl. "M7", "8", "1"
   roadName: string; // pl. "Budaörsi út", "Fő utca"
+  houseNumber?: string; // Házszám menetirány szerint pl. "42.", "12-14"
   city: string; // pl. "Budapest", "Budaörs"
   postcode: string; // pl. "1118"
   suburb?: string;
-  lanes: number; // Becsült vagy OSM adatból kinyert sávszám
+  lanes: number; // Becsült vagy OSM adatból kinyert menetirányú sávszám
   maxspeed?: number; // Sebességkorlátozás ha elérhető
   source: 'osm' | 'cache' | 'simulated';
   fullDisplayName?: string;
@@ -69,6 +89,7 @@ export interface DisplayOptions {
   showSpeed: boolean;
   showHeading: boolean;
   showCoordinates: boolean;
+  showHouseNumber: boolean;
 }
 
 export interface VoiceOptions {
@@ -91,4 +112,5 @@ export interface AppSettings {
   voiceOptions: VoiceOptions;
   highAccuracyGPS: boolean;
   showCompassWidget: boolean;
+  osmFeatures: OSMFeatureVisibility;
 }

@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     showSpeed: true,
     showHeading: true,
     showCoordinates: false,
+    showHouseNumber: true,
   },
   voiceOptions: {
     enabled: true,
@@ -27,7 +28,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
     announceRoadNumber: true,
     announceLaneInfo: false,
     announceApproachingHazards: true,
-    hazardWarningDistanceMeters: 250,
+    hazardWarningDistanceMeters: 200,
+  },
+  osmFeatures: {
+    showCrossings: true,
+    showRailways: true,
+    showTrafficSignals: true,
+    showTrafficSigns: true,
   },
 };
 
@@ -121,6 +128,7 @@ export function loadSettings(): AppSettings {
       ...parsed,
       displayOptions: { ...DEFAULT_SETTINGS.displayOptions, ...(parsed.displayOptions || {}) },
       voiceOptions: { ...DEFAULT_SETTINGS.voiceOptions, ...(parsed.voiceOptions || {}) },
+      osmFeatures: { ...DEFAULT_SETTINGS.osmFeatures, ...(parsed.osmFeatures || {}) },
     };
   } catch {
     return DEFAULT_SETTINGS;
