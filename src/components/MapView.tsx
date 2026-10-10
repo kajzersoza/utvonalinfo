@@ -54,7 +54,7 @@ export const MAP_LAYERS: MapLayerConfig[] = [
     name: 'Műholdas Térkép (Valós fotó)',
     icon: '🛰️',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics',
+    attribution: 'Tiles &copy; Esri &mdash; Maxar, Earthstar Geographics',
     maxZoom: 18,
   },
   {
@@ -135,7 +135,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const currentTileLayerRef = useRef<L.TileLayer | null>(null);
   const isUserInteractingRef = useRef(false);
 
-  // Active layer state: default to 'osm-dark' in dark theme, else 'osm-standard'
+  // Active layer state
   const [selectedLayerId, setSelectedLayerId] = useState<MapLayerId>(() => {
     const saved = localStorage.getItem('utinfo_selected_map_layer');
     if (saved && MAP_LAYERS.some((l) => l.id === saved)) {
@@ -166,6 +166,21 @@ export const MapView: React.FC<MapViewProps> = ({
       const hazardGroup = L.layerGroup().addTo(map);
       hazardsLayerGroupRef.current = hazardGroup;
 
+      // Add initial tile layer directly inside constructor
+      const layerConfig = MAP_LAYERS.find((l) => l.id === selectedLayerId) || MAP_LAYERS[0];
+      if (layerConfig.isDarkFilter) {
+        mapContainerRef.current.classList.add('leaflet-dark-mode');
+      } else {
+        mapContainerRef.current.classList.remove('leaflet-dark-mode');
+      }
+
+      const tileLayer = L.tileLayer(layerConfig.url, {
+        attribution: layerConfig.attribution,
+        maxZoom: layerConfig.maxZoom,
+        subdomains: layerConfig.subdomains || ['a', 'b', 'c'],
+      }).addTo(map);
+      currentTileLayerRef.current = tileLayer;
+
       // Handle map click to add hazard
       map.on('click', (e: L.LeafletMouseEvent) => {
         onAddHazardAtLocation(e.latlng.lat, e.latlng.lng, gps.heading || 0);
@@ -177,18 +192,22 @@ export const MapView: React.FC<MapViewProps> = ({
 
       mapInstanceRef.current = map;
 
-      // Ensure proper size calculation on mount
-      setTimeout(() => {
-        map.invalidateSize();
-      }, 200);
-    }
+      // Ensure proper size calculation on mount across multiple animation frames
+      map.invalidateSize();
+      const t1 = setTimeout(() => map.invalidateSize(), 80);
+      const t2 = setTimeout(() => map.invalidateSize(), 250);
+      const t3 = setTimeout(() => map.invalidateSize(), 500);
 
-    return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
-    };
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.remove();
+          mapInstanceRef.current = null;
+        }
+      };
+    }
   }, []);
 
   // Update Tile Layer whenever selectedLayerId changes
@@ -203,7 +222,7 @@ export const MapView: React.FC<MapViewProps> = ({
       map.removeLayer(currentTileLayerRef.current);
     }
 
-    // Apply dark mode CSS class to container if layer requires it or theme is dark with osm-dark
+    // Apply dark mode CSS class
     if (mapContainerRef.current) {
       if (layerConfig.isDarkFilter) {
         mapContainerRef.current.classList.add('leaflet-dark-mode');
@@ -221,9 +240,10 @@ export const MapView: React.FC<MapViewProps> = ({
 
     currentTileLayerRef.current = newTile;
     localStorage.setItem('utinfo_selected_map_layer', selectedLayerId);
+    map.invalidateSize();
   }, [selectedLayerId]);
 
-  // Window resize handler and ResizeObserver to ensure full canvas rendering
+  // Window resize handler and ResizeObserver to ensure map canvas fits container instantly
   useEffect(() => {
     const handleResize = () => {
       if (mapInstanceRef.current) {
@@ -406,8 +426,15 @@ export const MapView: React.FC<MapViewProps> = ({
   const currentLayer = MAP_LAYERS.find((l) => l.id === selectedLayerId) || MAP_LAYERS[0];
 
   return (
-    <div className="relative w-full h-full min-h-[420px] rounded-3xl overflow-hidden border border-zinc-700/60 shadow-xl bg-zinc-950">
-      <div ref={mapContainerRef} className="w-full h-full z-0" />
+    <div
+      className="relative w-full h-full min-h-[500px] flex-1 rounded-3xl overflow-hidden border border-zinc-700/60 shadow-xl bg-zinc-950 flex flex-col"
+      style={{ minHeight: '500px' }}
+    >
+      <div
+        ref={mapContainerRef}
+        className="w-full h-full flex-1 min-h-[500px] z-0"
+        style={{ width: '100%', height: '100%', minHeight: '500px' }}
+      />
 
       {/* Top Left: Status & Click Tip */}
       <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 max-w-[280px] sm:max-w-none">

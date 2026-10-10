@@ -18,6 +18,7 @@ import {
   SIMULATED_ROUTE_CITY,
   SIMULATED_ROUTE_HIGHWAY8,
   calculateBearing,
+  isHazardAheadInDirection,
 } from './services/geoService';
 
 import { Header } from './components/Header';
@@ -91,22 +92,25 @@ export default function App() {
 
   const checkApproachingHazards = useCallback(
     (currentLat: number, currentLon: number, currentHeading: number) => {
-      const maxDistance = settings.voiceOptions.hazardWarningDistanceMeters || 250;
+      const maxDistance = settings.voiceOptions.hazardWarningDistanceMeters || 200;
       const matches: { hazard: RoadHazard; distance: number }[] = [];
 
       for (const h of hazards) {
-        const dist = calculateDistanceMeters(currentLat, currentLon, h.latitude, h.longitude);
+        // STRICT CHECK: strictly matching direction of travel, in front of vehicle (előrejelezve), and once passed: NO alert!
+        const { isAhead, distance } = isHazardAheadInDirection(
+          currentLat,
+          currentLon,
+          currentHeading,
+          h.latitude,
+          h.longitude,
+          h.heading,
+          maxDistance
+        );
 
-        if (dist <= maxDistance) {
-          // Check directional match:
-          // User requirement: "az irányt is rögzítse mert az úthiba az adott irányra vonatkozik csak"
-          // We verify if heading difference is within 50 degrees
-          const headingDiff = Math.abs((currentHeading - h.heading + 180 + 360) % 360 - 180);
-          if (headingDiff <= 55) {
-            matches.push({ hazard: h, distance: dist });
-            // Announce voice alert
-            speechService.announceHazardAlert(h, dist, settings.voiceOptions);
-          }
+        if (isAhead) {
+          matches.push({ hazard: h, distance });
+          // Announce voice alert
+          speechService.announceHazardAlert(h, distance, settings.voiceOptions);
         }
       }
 
@@ -385,6 +389,16 @@ export default function App() {
     }
   };
 
+  const handleUpdateWarningDistance = (meters: number) => {
+    setSettings((prev) => ({
+      ...prev,
+      voiceOptions: {
+        ...prev.voiceOptions,
+        hazardWarningDistanceMeters: meters,
+      },
+    }));
+  };
+
   const handleToggleVoice = () => {
     setSettings((prev) => ({
       ...prev,
@@ -453,12 +467,14 @@ export default function App() {
                 onTriggerRecordHazard={handleTriggerRecordHazard}
                 onToggleVoice={handleToggleVoice}
                 onOpenSettings={() => setIsSettingsOpen(true)}
+                onUpdateWarningDistance={handleUpdateWarningDistance}
               />
             </div>
 
             {/* Interactive OpenStreetMap on Desktop */}
-            <div className="lg:col-span-7 h-full min-h-[450px]">
+            <div className="lg:col-span-7 h-full min-h-[550px] flex flex-col">
               <MapView
+                key="split-map"
                 gps={gps}
                 hazards={hazards}
                 onAddHazardAtLocation={handleAddHazardAtLocation}
@@ -481,14 +497,16 @@ export default function App() {
               onTriggerRecordHazard={handleTriggerRecordHazard}
               onToggleVoice={handleToggleVoice}
               onOpenSettings={() => setIsSettingsOpen(true)}
+              onUpdateWarningDistance={handleUpdateWarningDistance}
             />
           </div>
         )}
 
         {/* FULL MAP VIEW */}
         {activeTab === 'map' && (
-          <div className="flex-1 h-full min-h-[550px]">
+          <div className="flex-1 w-full h-[calc(100vh-140px)] min-h-[550px] flex flex-col">
             <MapView
+              key="full-map"
               gps={gps}
               hazards={hazards}
               onAddHazardAtLocation={handleAddHazardAtLocation}

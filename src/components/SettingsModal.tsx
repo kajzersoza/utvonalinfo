@@ -272,6 +272,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="w-5 h-5 accent-red-600 rounded"
                   />
                 </label>
+
+                {/* Warning Distance Preset Selector */}
+                {settings.voiceOptions.announceApproachingHazards && (
+                  <div className="bg-zinc-800/60 p-3 rounded-xl border border-zinc-700/60 space-y-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-zinc-300">Előrejelzési Távolság a hiba előtt:</span>
+                      <span className="font-mono text-red-400 font-bold">
+                        {settings.voiceOptions.hazardWarningDistanceMeters} méter
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {[100, 200, 300, 500, 1000].map((meters) => (
+                        <button
+                          key={meters}
+                          type="button"
+                          onClick={() =>
+                            onUpdateSettings({
+                              ...settings,
+                              voiceOptions: {
+                                ...settings.voiceOptions,
+                                hazardWarningDistanceMeters: meters,
+                              },
+                            })
+                          }
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                            settings.voiceOptions.hazardWarningDistanceMeters === meters
+                              ? 'bg-red-600 text-white border-red-500 font-black'
+                              : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-white'
+                          }`}
+                        >
+                          {meters}m
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Voice Speed Slider */}

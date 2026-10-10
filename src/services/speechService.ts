@@ -159,10 +159,11 @@ class SpeechService {
         ? 'jobb oldalon'
         : 'középen';
 
+    const laneText = hazard.laneNumber ? `a ${hazard.laneNumber}. sávban ` : '';
     const hazardName = getHazardNameHungarian(hazard.hazardType);
     const distText = Math.round(distanceMeters / 10) * 10;
 
-    const message = `Figyelem! ${distText} méterre ${hazardName} a ${lateralText}!`;
+    const message = `Figyelem! ${distText} méterre ${hazardName} ${laneText}${lateralText}!`;
     this.speak(message, options);
   }
 }

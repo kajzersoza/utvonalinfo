@@ -275,10 +275,10 @@ export const HazardModal: React.FC<HazardModalProps> = ({
 
           {/* 3. Lanes count & Target Lane */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Number of lanes */}
+            {/* Number of lanes in current direction */}
             <div className="bg-zinc-800/40 border border-zinc-700/70 p-4 rounded-2xl">
-              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 block">
-                Sávok száma ezen az úton
+              <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider mb-2 block">
+                Menetirány szerinti sávok száma
               </label>
               <div className="flex items-center gap-2">
                 {[1, 2, 3, 4, 5].map((count) => (
@@ -301,10 +301,10 @@ export const HazardModal: React.FC<HazardModalProps> = ({
               </div>
             </div>
 
-            {/* Which lane index if multiple */}
+            {/* Which lane index in this direction */}
             <div className="bg-zinc-800/40 border border-zinc-700/70 p-4 rounded-2xl">
-              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 block">
-                Érintett sáv (1-től balról/jobbról)
+              <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider mb-2 block">
+                Érintett sáv a menetirányodban
               </label>
               <div className="flex items-center gap-2">
                 {Array.from({ length: laneCount }, (_, i) => i + 1).map((laneIdx) => (

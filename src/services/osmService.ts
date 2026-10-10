@@ -87,18 +87,33 @@ function extractRoadNumber(data: NominatimResponse, streetName: string): string 
   return '';
 }
 
-// Estimate lanes if not strictly tagged in OSM
-function estimateLanes(data: NominatimResponse): number {
-  if (data.extratags?.lanes) {
-    const parsed = parseInt(data.extratags.lanes, 10);
-    if (!isNaN(parsed) && parsed > 0 && parsed <= 8) return parsed;
+// Estimate lanes strictly in the driver's direction of travel (adott menetirány szerinti sávok)
+function estimateDirectionalLanes(data: NominatimResponse): number {
+  const extratags = (data.extratags || {}) as Record<string, string | undefined>;
+  if (extratags['lanes:forward']) {
+    const forward = parseInt(extratags['lanes:forward'] || '', 10);
+    if (!isNaN(forward) && forward > 0) return forward;
   }
-  const highway = data.extratags?.highway || data.address?.highway;
+
+  const highway = extratags.highway || data.address?.highway;
+  const isOneway =
+    extratags.oneway === 'yes' ||
+    extratags.oneway === '1' ||
+    highway === 'motorway' ||
+    highway === 'motorway_link';
+
+  if (extratags.lanes) {
+    const total = parseInt(extratags.lanes, 10);
+    if (!isNaN(total) && total > 0) {
+      if (isOneway) return total;
+      return Math.max(1, Math.round(total / 2));
+    }
+  }
+
   if (highway === 'motorway') return 3;
-  if (highway === 'trunk') return 2;
-  if (highway === 'primary') return 2;
-  if (highway === 'residential' || highway === 'living_street') return 1;
-  return 2;
+  if (highway === 'trunk') return isOneway ? 2 : 1;
+  if (highway === 'primary' || highway === 'secondary') return isOneway ? 2 : 1;
+  return 1;
 }
 
 export async function fetchOSMRoadInfo(lat: number, lon: number): Promise<RoadInfo> {
@@ -155,7 +170,7 @@ export async function fetchOSMRoadInfo(lat: number, lon: number): Promise<RoadIn
 
     const postcode = address.postcode || '';
     const roadNumber = extractRoadNumber(data, roadName);
-    const lanes = estimateLanes(data);
+    const lanes = estimateDirectionalLanes(data);
     const maxspeed = data.extratags?.maxspeed ? parseInt(data.extratags.maxspeed, 10) : undefined;
 
     const roadInfo: RoadInfo = {
