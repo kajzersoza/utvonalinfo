@@ -29,6 +29,7 @@ import {
   SIMULATED_ROUTE_HIGHWAY8,
   calculateBearing,
   isHazardAheadInDirection,
+  isFeatureAheadInDirection,
 } from './services/geoService';
 import {
   subscribeToAuth,
@@ -274,52 +275,92 @@ export default function App() {
 
   // -------------------------------------------------------------
   // Proximity OSM Features Check (Crossing, Railway, Signals, Signs)
+  // Strictly applies configured hazardWarningDistanceMeters and only alerts when approaching!
   // -------------------------------------------------------------
+  const prevOsmDistancesRef = useRef<Map<string, number>>(new Map());
+
   const checkApproachingOsmFeatures = useCallback(
-    (currentLat: number, currentLon: number) => {
-      const maxDistance = 220; // 220 méteres figyelmeztetési körzet
+    (currentLat: number, currentLon: number, currentHeading: number) => {
+      // 1. Applies user's configured warning distance (beállított jelzési távolság)
+      const maxDistance = settings.voiceOptions.hazardWarningDistanceMeters || 200;
 
       for (const f of osmFeatures) {
-        const dist = calculateDistanceMeters(currentLat, currentLon, f.latitude, f.longitude);
-        if (dist <= maxDistance) {
-          // Check if this type has audio or voice enabled
-          const shouldPlayAudio =
-            settings.soundAlerts.enabled &&
-            settings.soundAlerts.alertMode !== 'voice_only' &&
-            ((f.type === 'crossing' && settings.osmFeatures.announceCrossings) ||
-              (f.type === 'railway' && settings.osmFeatures.announceRailways) ||
-              (f.type === 'traffic_signals' && settings.osmFeatures.announceTrafficSignals) ||
-              (f.type === 'traffic_sign' && settings.osmFeatures.announceTrafficSigns));
+        // 2. STRICTLY check approaching in driver's forward travel direction (windshield forward cone)
+        // Returns isAhead = true only if ahead in front of vehicle (<= 65 deg relative angle) and distance >= 5m
+        const { isAhead, distance } = isFeatureAheadInDirection(
+          currentLat,
+          currentLon,
+          currentHeading,
+          f.latitude,
+          f.longitude,
+          maxDistance
+        );
 
-          if (shouldPlayAudio) {
-            audioAlertService.triggerFeatureAudio(f.type, settings.soundAlerts);
-          }
+        const prevDist = prevOsmDistancesRef.current.get(f.id);
+        prevOsmDistancesRef.current.set(f.id, distance);
 
-          speechService.announceOSMFeatureAlert(
-            f,
-            dist,
-            settings.voiceOptions,
-            settings.osmFeatures,
-            settings.soundAlerts.alertMode
-          );
+        // If not ahead (e.g. passed, behind vehicle) -> DO NOT ALERT!
+        if (!isAhead) {
+          continue;
         }
+
+        // 3. STRICTLY alert only when approaching (közeledéskor)!
+        // If distance is increasing (távolodás: current distance grew by more than 3m), DO NOT ALERT!
+        if (prevDist !== undefined && distance > prevDist + 3) {
+          continue;
+        }
+
+        // Check if this type has audio or voice enabled
+        const shouldPlayAudio =
+          settings.soundAlerts.enabled &&
+          settings.soundAlerts.alertMode !== 'voice_only' &&
+          ((f.type === 'crossing' && settings.osmFeatures.announceCrossings) ||
+            (f.type === 'railway' && settings.osmFeatures.announceRailways) ||
+            (f.type === 'traffic_signals' && settings.osmFeatures.announceTrafficSignals) ||
+            (f.type === 'traffic_sign' && settings.osmFeatures.announceTrafficSigns) ||
+            (f.type === 'city_limit' && settings.osmFeatures.announceCityLimits !== false));
+
+        if (shouldPlayAudio) {
+          audioAlertService.triggerFeatureAudio(f.type, settings.soundAlerts, f.id);
+        }
+
+        speechService.announceOSMFeatureAlert(
+          f,
+          distance,
+          settings.voiceOptions,
+          settings.osmFeatures,
+          settings.soundAlerts.alertMode
+        );
       }
     },
-    [osmFeatures, settings.soundAlerts, settings.voiceOptions, settings.osmFeatures]
+    [osmFeatures, settings.voiceOptions, settings.soundAlerts, settings.osmFeatures]
   );
 
   // -------------------------------------------------------------
-  // Nearby OSM Road Features (Crossing, Traffic Signals, Railway, Signs)
+  // Nearby Approaching OSM Road Features (HUD Strip in Cockpit)
+  // Strictly applies configured warning distance and only includes approaching features!
   // -------------------------------------------------------------
   const nearbyOsmFeatures = useMemo(() => {
+    const maxWarningDist = settings.voiceOptions.hazardWarningDistanceMeters || 200;
     return osmFeatures
-      .map((f) => ({
-        feature: f,
-        distance: calculateDistanceMeters(gps.latitude, gps.longitude, f.latitude, f.longitude),
-      }))
-      .filter(({ distance }) => distance <= 350)
+      .map((f) => {
+        const { isAhead, distance } = isFeatureAheadInDirection(
+          gps.latitude,
+          gps.longitude,
+          gps.heading,
+          f.latitude,
+          f.longitude,
+          maxWarningDist
+        );
+        return {
+          feature: f,
+          distance,
+          isAhead,
+        };
+      })
+      .filter(({ isAhead }) => isAhead)
       .sort((a, b) => a.distance - b.distance);
-  }, [osmFeatures, gps.latitude, gps.longitude]);
+  }, [osmFeatures, gps.latitude, gps.longitude, gps.heading, settings.voiceOptions.hazardWarningDistanceMeters]);
 
   // -------------------------------------------------------------
   // Real GPS Geolocation Watcher
@@ -373,8 +414,8 @@ export default function App() {
         // Check approaching hazards (Sound chimes & Speech)
         checkApproachingHazards(latitude, longitude, finalHeading);
 
-        // Check approaching OSM features (Crossings, railways, signals, signs)
-        checkApproachingOsmFeatures(latitude, longitude);
+        // Check approaching OSM features (Crossings, railways, signals, signs - strictly heading & approaching only)
+        checkApproachingOsmFeatures(latitude, longitude, finalHeading);
 
         // Automatically fetch nearby online OSM features in background
         fetchOnlineOsm(latitude, longitude);
@@ -462,7 +503,7 @@ export default function App() {
       });
 
       checkApproachingHazards(pt.lat, pt.lon, pt.heading);
-      checkApproachingOsmFeatures(pt.lat, pt.lon);
+      checkApproachingOsmFeatures(pt.lat, pt.lon, pt.heading);
       fetchOnlineOsm(pt.lat, pt.lon);
       return nextIdx;
     });
@@ -503,8 +544,11 @@ export default function App() {
         lanes: pt.lanes,
         source: 'simulated',
       });
+      checkApproachingHazards(pt.lat, pt.lon, pt.heading);
+      checkApproachingOsmFeatures(pt.lat, pt.lon, pt.heading);
+      fetchOnlineOsm(pt.lat, pt.lon);
     }
-  }, [getSelectedRoute]);
+  }, [getSelectedRoute, checkApproachingHazards, checkApproachingOsmFeatures, fetchOnlineOsm]);
 
   const handleStopSimulation = useCallback(() => {
     setIsSimulating(false);

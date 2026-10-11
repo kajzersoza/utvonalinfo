@@ -11,6 +11,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
     showCity: true,
     showStreet: true,
     showRoadNumber: true,
+    showRoadNumberWhenNoStreet: true, // Út száma megjelenítése az utca helyén ha nincs utcanév
+    showSpeedLimit: true, // Sebességkorlátozás tábla a város kártyán jobbra
+    showCityLimitSign: true, // Településhatár (Várostábla) jelzése
     showPostcode: true,
     showLaneInfo: true,
     showSpeed: true,
@@ -47,6 +50,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
     announceTrafficSignals: true,
     showTrafficSigns: true,
     announceTrafficSigns: true,
+    showCityLimits: true,
+    announceCityLimits: true,
+    showSpeedLimits: true,
+    announceSpeedLimits: true,
   },
 };
 

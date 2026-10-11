@@ -56,7 +56,7 @@ export interface UserProfile {
   photoURL?: string | null;
 }
 
-export type OSMFeatureType = 'crossing' | 'railway' | 'traffic_signals' | 'traffic_sign';
+export type OSMFeatureType = 'crossing' | 'railway' | 'traffic_signals' | 'traffic_sign' | 'city_limit';
 
 export interface OSMFeature {
   id: string;
@@ -66,6 +66,7 @@ export interface OSMFeature {
   longitude: number;
   description?: string;
   speedLimit?: number;
+  cityLimitName?: string;
 }
 
 export interface OSMFeatureVisibility {
@@ -77,6 +78,10 @@ export interface OSMFeatureVisibility {
   announceTrafficSignals: boolean; // Jelzőlámpák bemondása
   showTrafficSigns: boolean; // Közlekedési táblák mutatása
   announceTrafficSigns: boolean; // Közlekedési táblák bemondása
+  showCityLimits?: boolean; // Településhatár (Várostábla) mutatása
+  announceCityLimits?: boolean; // Településhatár bemondása
+  showSpeedLimits?: boolean; // Sebességkorlátozó jelzések mutatása
+  announceSpeedLimits?: boolean; // Sebességkorlátozó jelzések bemondása
 }
 
 export interface SoundAlertOptions {
@@ -108,6 +113,8 @@ export interface RoadInfo {
   suburb?: string;
   lanes: number; // Becsült vagy OSM adatból kinyert menetirányú sávszám
   maxspeed?: number; // Sebességkorlátozás ha elérhető
+  isCityLimit?: boolean; // Településhatár / városhatár aktív
+  cityLimitName?: string; // Település neve a táblán
   source: 'osm' | 'cache' | 'simulated';
   fullDisplayName?: string;
 }
@@ -116,6 +123,9 @@ export interface DisplayOptions {
   showCity: boolean;
   showStreet: boolean;
   showRoadNumber: boolean;
+  showRoadNumberWhenNoStreet: boolean; // Út száma megjelenítése az utca helyén ha nincs utcanév
+  showSpeedLimit: boolean; // Sebességkorlátozás tábla a város kártya jobb oldalán
+  showCityLimitSign: boolean; // Településhatár tábla jelzése
   showPostcode: boolean;
   showLaneInfo: boolean;
   showSpeed: boolean;

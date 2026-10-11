@@ -103,6 +103,44 @@ export function isHazardAheadInDirection(
   return { isAhead: false, distance };
 }
 
+/**
+ * Checks if an OSM feature (zebra crossing, railway level crossing, traffic signals, road signs, etc.) is:
+ * 1. Strictly in front of the vehicle in the forward windshield direction (relative angle <= 65 degrees)
+ * 2. Within the user's configured warning distance (maxDistanceMeters, e.g. 100m, 200m, 300m)
+ * 3. Not already passed (distance >= 5m)
+ * If the vehicle has passed the feature (relative angle > 75 degrees) or is moving away, returns isAhead: false.
+ */
+export function isFeatureAheadInDirection(
+  carLat: number,
+  carLon: number,
+  carHeading: number,
+  featureLat: number,
+  featureLon: number,
+  maxDistanceMeters: number
+): { isAhead: boolean; distance: number; relativeAngle: number } {
+  const distance = calculateDistanceMeters(carLat, carLon, featureLat, featureLon);
+  if (distance > maxDistanceMeters) {
+    return { isAhead: false, distance, relativeAngle: 180 };
+  }
+
+  // Already passed if practically at location (< 5m)
+  if (distance < 5) {
+    return { isAhead: false, distance, relativeAngle: 180 };
+  }
+
+  // Forward view cone: calculate bearing from vehicle to the feature
+  const bearingToFeature = calculateBearing(carLat, carLon, featureLat, featureLon);
+  const relativeAngle = Math.abs(((carHeading - bearingToFeature + 180 + 360) % 360) - 180);
+
+  // <= 65 degrees: directly ahead in driver's forward travel direction (közeledés)
+  // > 75 degrees: to the side/behind the vehicle (távolodás / passed)
+  if (relativeAngle <= 65) {
+    return { isAhead: true, distance, relativeAngle };
+  }
+
+  return { isAhead: false, distance, relativeAngle };
+}
+
 export function getCardinalDirection(heading: number): string {
   const normalized = (heading % 360 + 360) % 360;
   const directions = [

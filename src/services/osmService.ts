@@ -48,10 +48,16 @@ export const SAMPLE_OSM_FEATURES: OSMFeature[] = [
   { id: 'osm-f-9', type: 'railway', name: 'Iparvágány vasúti átkelő', latitude: 47.1910, longitude: 18.2550, description: 'Vasúti szintbeli átjáró Várpalota' },
 
   // Közlekedési táblák (Traffic signs)
-  { id: 'osm-f-10', type: 'traffic_sign', name: 'Sebességkorlátozás 70 km/h', latitude: 47.4680, longitude: 19.0100, description: 'Megengedett legnagyobb sebesség 70', speedLimit: 70 },
-  { id: 'osm-f-11', type: 'traffic_sign', name: 'Sebességkorlátozás 50 km/h', latitude: 47.4960, longitude: 19.0405, description: 'Lakott terület sebességkorlátozás 50', speedLimit: 50 },
+  { id: 'osm-f-10', type: 'traffic_sign', name: 'Sebességkorlátozás 70 km/h', latitude: 47.4680, longitude: 19.0100, description: 'Megengedett legnagyobb sebesség 70 tábla', speedLimit: 70 },
+  { id: 'osm-f-11', type: 'traffic_sign', name: 'Sebességkorlátozás 50 km/h', latitude: 47.4960, longitude: 19.0405, description: 'Lakott terület sebességkorlátozás 50 tábla', speedLimit: 50 },
   { id: 'osm-f-12', type: 'traffic_sign', name: 'Autópálya kezdete (130 km/h)', latitude: 47.4610, longitude: 18.9900, description: 'M7 autópálya matrica ellenőrzés', speedLimit: 130 },
   { id: 'osm-f-13', type: 'traffic_sign', name: 'Elsőbbségadás kötelező', latitude: 47.5040, longitude: 19.0390, description: 'Mackósajt tábla csomópontban' },
+  { id: 'osm-f-14', type: 'traffic_sign', name: 'Sebességkorlátozás 90 km/h', latitude: 47.1940, longitude: 18.3500, description: 'Főúti sebességkorlátozás 90 tábla', speedLimit: 90 },
+
+  // Településhatár jelző táblák (Town boundary / City limit signs)
+  { id: 'osm-f-15', type: 'city_limit', name: 'Budapest városhatár tábla', latitude: 47.4620, longitude: 18.9950, cityLimitName: 'Budapest', speedLimit: 50, description: 'Budapest lakott terület kezdete (50 km/h)' },
+  { id: 'osm-f-16', type: 'city_limit', name: 'Budaörs városhatár tábla', latitude: 47.4580, longitude: 18.9810, cityLimitName: 'Budaörs', speedLimit: 50, description: 'Budaörs lakott terület kezdete (50 km/h)' },
+  { id: 'osm-f-17', type: 'city_limit', name: 'Várpalota városhatár tábla', latitude: 47.1915, longitude: 18.2800, cityLimitName: 'Várpalota', speedLimit: 50, description: 'Várpalota lakott terület kezdete (50 km/h)' },
 ];
 
 // In-memory cache for reverse geocode coordinates
@@ -263,7 +269,7 @@ export async function fetchNearbyOSMFeatures(
   lastOverpassQueryLon = lon;
   lastOverpassQueryTime = now;
 
-  const query = `[out:json][timeout:6];(node["highway"="crossing"](around:500,${lat.toFixed(5)},${lon.toFixed(5)});way["highway"="crossing"](around:500,${lat.toFixed(5)},${lon.toFixed(5)});node["railway"~"^(level_crossing|crossing)$"](around:550,${lat.toFixed(5)},${lon.toFixed(5)});node["highway"="traffic_signals"](around:500,${lat.toFixed(5)},${lon.toFixed(5)});node["traffic_sign"](around:500,${lat.toFixed(5)},${lon.toFixed(5)});node["highway"~"^(speed_camera|stop|give_way)$"](around:500,${lat.toFixed(5)},${lon.toFixed(5)}););out center 45;`;
+  const query = `[out:json][timeout:6];(node["highway"="crossing"](around:500,${lat.toFixed(5)},${lon.toFixed(5)});way["highway"="crossing"](around:500,${lat.toFixed(5)},${lon.toFixed(5)});node["railway"~"^(level_crossing|crossing)$"](around:550,${lat.toFixed(5)},${lon.toFixed(5)});node["highway"="traffic_signals"](around:500,${lat.toFixed(5)},${lon.toFixed(5)});node["traffic_sign"](around:500,${lat.toFixed(5)},${lon.toFixed(5)});node["highway"~"^(speed_camera|stop|give_way)$"](around:500,${lat.toFixed(5)},${lon.toFixed(5)});node["place"~"^(city|town|village|suburb)$"](around:600,${lat.toFixed(5)},${lon.toFixed(5)}););out center 45;`;
 
   const endpoints = [
     'https://overpass-api.de/api/interpreter',
@@ -314,25 +320,50 @@ export async function fetchNearbyOSMFeatures(
           type = 'traffic_signals';
           name = tags.name || 'Forgalmi jelzőlámpa';
           desc = 'Közúti csomóponti jelzőlámpa';
+        } else if (tags.place && ['city', 'town', 'village', 'suburb', 'hamlet'].includes(tags.place)) {
+          type = 'city_limit';
+          const cityName = tags.name || tags['name:hu'] || tags.city || 'Település';
+          name = `${cityName} városhatár (Településtábla)`;
+          desc = `${cityName} lakott terület kezdete (50 km/h)`;
+          speedLimit = 50;
         } else if (tags.traffic_sign || tags.highway === 'speed_camera' || tags.highway === 'stop' || tags.highway === 'give_way') {
-          type = 'traffic_sign';
-          if (tags.highway === 'speed_camera') {
-            name = 'Sebességmérő kamera (Traffipax)';
-            desc = 'Automata sebességellenőrzés';
-          } else if (tags.highway === 'stop') {
-            name = 'ÁLLJ! Elsőbbségadás kötelező (STOP tábla)';
-            desc = 'Közlekedési Stop tábla';
-          } else if (tags.highway === 'give_way') {
-            name = 'Elsőbbségadás kötelező tábla';
-            desc = 'Mackósajt elsőbbségadás tábla';
+          // Check if this sign is a city limit sign
+          const signStr = String(tags.traffic_sign || '');
+          if (signStr.includes('city_limit') || signStr.includes('HU:C-01') || signStr.includes('village_limit')) {
+            type = 'city_limit';
+            const cityName = tags.name || tags.city || 'Település';
+            name = `${cityName} városhatár tábla`;
+            desc = `${cityName} lakott terület tábla (50 km/h)`;
+            speedLimit = 50;
           } else {
-            name = `Közlekedési tábla (${tags.traffic_sign})`;
-            desc = 'Közúti jelzőtábla';
-          }
+            type = 'traffic_sign';
+            if (tags.highway === 'speed_camera') {
+              name = 'Sebességmérő kamera (Traffipax)';
+              desc = 'Automata sebességellenőrzés';
+            } else if (tags.highway === 'stop') {
+              name = 'ÁLLJ! Elsőbbségadás kötelező (STOP tábla)';
+              desc = 'Közlekedési Stop tábla';
+            } else if (tags.highway === 'give_way') {
+              name = 'Elsőbbségadás kötelező tábla';
+              desc = 'Mackósajt elsőbbségadás tábla';
+            } else {
+              name = `Közlekedési tábla (${tags.traffic_sign})`;
+              desc = 'Közúti jelzőtábla';
+            }
 
-          if (tags.maxspeed) {
-            speedLimit = parseInt(tags.maxspeed, 10);
-            if (!isNaN(speedLimit)) name = `Sebességkorlátozás: ${speedLimit} km/h`;
+            if (tags.maxspeed) {
+              speedLimit = parseInt(tags.maxspeed, 10);
+            } else {
+              const matchedSpeed = signStr.match(/\b(30|40|50|60|70|80|90|100|110|120|130)\b/);
+              if (matchedSpeed) {
+                speedLimit = parseInt(matchedSpeed[1], 10);
+              }
+            }
+
+            if (speedLimit && !isNaN(speedLimit)) {
+              name = `Sebességkorlátozás: ${speedLimit} km/h`;
+              desc = `Megengedett legnagyobb sebesség: ${speedLimit} km/h`;
+            }
           }
         }
 
@@ -345,6 +376,7 @@ export async function fetchNearbyOSMFeatures(
             longitude: itemLon,
             description: desc,
             speedLimit,
+            cityLimitName: type === 'city_limit' ? (tags.name || tags.city) : undefined,
           });
         }
       }

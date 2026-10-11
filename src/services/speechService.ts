@@ -177,7 +177,7 @@ class SpeechService {
    * Alert driver when approaching an OSM feature if speech is enabled for that type
    */
   public announceOSMFeatureAlert(
-    feature: { id: string; type: string; name: string },
+    feature: { id: string; type: string; name: string; speedLimit?: number; cityLimitName?: string },
     distanceMeters: number,
     options: VoiceOptions,
     visibility: {
@@ -185,6 +185,8 @@ class SpeechService {
       announceRailways?: boolean;
       announceTrafficSignals?: boolean;
       announceTrafficSigns?: boolean;
+      announceCityLimits?: boolean;
+      announceSpeedLimits?: boolean;
     },
     alertMode?: 'both' | 'sound_only' | 'voice_only'
   ) {
@@ -205,7 +207,16 @@ class SpeechService {
       label = 'forgalmi jelzőlámpa';
     } else if (feature.type === 'traffic_sign' && visibility.announceTrafficSigns) {
       shouldAnnounce = true;
-      label = feature.name;
+      if (feature.speedLimit && visibility.announceSpeedLimits !== false) {
+        label = `sebességkorlátozás ${feature.speedLimit} kilométer per óra`;
+      } else {
+        label = feature.name;
+      }
+    } else if (feature.type === 'city_limit' && visibility.announceCityLimits !== false) {
+      shouldAnnounce = true;
+      label = feature.cityLimitName
+        ? `${feature.cityLimitName} településhatár, lakott terület kezdete`
+        : 'településhatár tábla, lakott terület kezdete';
     }
 
     if (!shouldAnnounce) return;

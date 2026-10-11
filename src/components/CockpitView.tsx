@@ -52,11 +52,70 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
       )
     : null;
 
+  // -------------------------------------------------------------
+  // Speed limit & City Limit (Várostábla) calculations
+  // -------------------------------------------------------------
+  const approachingSpeedSign = nearbyOsmFeatures.find(
+    (f) =>
+      (f.feature.type === 'traffic_sign' && f.feature.speedLimit) ||
+      (f.feature.type === 'city_limit' && f.feature.speedLimit)
+  );
+
+  const approachingCityLimit = nearbyOsmFeatures.find(
+    (f) => f.feature.type === 'city_limit'
+  );
+
+  // Active speed limit: from approaching sign, or OSM roadInfo maxspeed, or standard Hungarian defaults
+  const activeSpeedLimit =
+    approachingSpeedSign?.feature.speedLimit ||
+    roadInfo.maxspeed ||
+    (isHighway ? 130 : roadInfo.city ? 50 : 90);
+
+  const isSpeedExceeded = gps.speed > activeSpeedLimit + 3;
+
+  // -------------------------------------------------------------
+  // Single place for road number:
+  // "az út számát csak egy helyen jelezd, az utca helyén ha nincs utca"
+  // -------------------------------------------------------------
+  const rawStreet = (roadInfo.roadName || '').trim();
+  const rawRoadNumber = (roadInfo.roadNumber || '').trim();
+
+  const isGenericOrHighway =
+    !rawStreet ||
+    rawStreet === 'Jelenlegi útszakasz keresése...' ||
+    rawStreet === 'Névtelen út' ||
+    rawStreet === 'Névtelen út / Nyomvonal' ||
+    rawStreet.toLowerCase() === rawRoadNumber.toLowerCase() ||
+    (rawRoadNumber &&
+      rawStreet.toLowerCase().includes(rawRoadNumber.toLowerCase()) &&
+      (rawStreet.toLowerCase().includes('autópálya') || rawStreet.toLowerCase().includes('főút')));
+
+  const showRoadNumWhenNoStreet = displayOptions.showRoadNumberWhenNoStreet !== false;
+
+  let streetRowTitle = '';
+  if (!isGenericOrHighway) {
+    streetRowTitle = rawStreet;
+  } else if (showRoadNumWhenNoStreet && rawRoadNumber) {
+    streetRowTitle =
+      rawStreet.length > 0 &&
+      rawStreet !== 'Névtelen út' &&
+      rawStreet !== 'Jelenlegi útszakasz keresése...'
+        ? rawStreet
+        : isHighway
+        ? `${rawRoadNumber} Autópálya`
+        : `${rawRoadNumber}. számú főút`;
+  } else if (rawStreet) {
+    streetRowTitle = rawStreet;
+  } else {
+    streetRowTitle = 'Országút / Jelenlegi útszakasz';
+  }
+
   return (
     <div className="flex flex-col h-full w-full justify-between gap-3 sm:gap-4 p-2 sm:p-4 select-none">
-      {/* 1. Top Driver Info Board: Postal code + City + Street with FIXED HEIGHT, and data above city moved to the right side */}
+      {/* 1. Top Driver Info Board: Postal code + City + Street / Road Number with STRICT FIXED HEIGHT (h-28 sm:h-32) */}
+      {/* Speed limit sign placed on the right side of the city card as requested */}
       <div
-        className={`rounded-3xl px-4 sm:px-6 py-3 sm:py-4 border shadow-xl backdrop-blur-md transition-colors h-28 sm:h-32 shrink-0 flex items-center justify-between gap-3 ${
+        className={`rounded-3xl px-4 sm:px-6 py-3 sm:py-4 border shadow-xl backdrop-blur-md transition-colors h-28 sm:h-32 max-h-28 sm:max-h-32 shrink-0 flex items-center justify-between gap-3 overflow-hidden ${
           isDark
             ? 'bg-zinc-900/90 border-zinc-800 text-white'
             : 'bg-white border-zinc-200 text-zinc-900'
@@ -64,21 +123,34 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
       >
         {/* Left: City Name and Address with Fixed Heights to prevent any layout shifts */}
         <div className="flex-1 min-w-0 flex flex-col justify-center h-full overflow-hidden">
-          {/* POSTAL CODE AND CITY IN ONE LINE, LARGER FONT */}
+          {/* POSTAL CODE AND CITY IN ONE LINE + CITY LIMIT (VÁROSTÁBLA) BADGE */}
           {displayOptions.showCity && (
-            <div className="h-8 sm:h-9 flex items-center text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-amber-400 leading-tight truncate">
-              {roadInfo.postcode ? `${roadInfo.postcode} ` : ''}
-              {roadInfo.city || 'Helymeghatározás...'}
+            <div className="h-8 sm:h-9 flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-amber-400 leading-tight truncate">
+              <span className="truncate">
+                {roadInfo.postcode ? `${roadInfo.postcode} ` : ''}
+                {roadInfo.city || 'Helymeghatározás...'}
+              </span>
+
+              {/* Town boundary / Várostábla indicator */}
+              {displayOptions.showCityLimitSign !== false &&
+                (approachingCityLimit || roadInfo.isCityLimit) && (
+                  <span
+                    className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border-2 border-black text-black text-[11px] sm:text-xs font-black tracking-wider uppercase shadow-md animate-pulse"
+                    title="Településhatár / Várostábla (Lakott terület 50 km/h)"
+                  >
+                    🏙️ {approachingCityLimit?.feature.cityLimitName || roadInfo.cityLimitName || roadInfo.city || 'VÁROSHATÁR'}
+                  </span>
+                )}
             </div>
           )}
 
-          {/* Street Name + House Number (menetirány szerinti házszám) */}
+          {/* Street Name OR Road Number (only in one place, here if no street) + House Number */}
           {displayOptions.showStreet && (
             <div className="h-7 sm:h-8 flex items-baseline gap-2 mt-0.5 overflow-hidden">
               <h1 className="font-extrabold text-lg sm:text-2xl tracking-tight leading-tight truncate">
-                {roadInfo.roadName || 'Jelenlegi útszakasz keresése...'}
+                {streetRowTitle}
               </h1>
-              {roadInfo.houseNumber && (
+              {roadInfo.houseNumber && !isGenericOrHighway && (
                 <span className="text-lg sm:text-2xl font-black text-cyan-400 shrink-0">
                   {roadInfo.houseNumber}
                 </span>
@@ -87,24 +159,35 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
           )}
         </div>
 
-        {/* Right Side: Data previously above the city (Road number badge) moved to the right side */}
-        {displayOptions.showRoadNumber && roadInfo.roadNumber && (
+        {/* Right Side: Speed limit sign placed on the right side of the city card as requested */}
+        {displayOptions.showSpeedLimit !== false && (
           <div className="shrink-0 flex items-center justify-end pl-2">
-            <span
-              className={`px-3.5 py-1.5 sm:px-5 sm:py-2.5 rounded-2xl font-black text-base sm:text-xl md:text-2xl tracking-wider shadow-lg inline-flex items-center justify-center ${
-                isHighway
-                  ? 'bg-blue-600 text-white ring-2 ring-blue-400 shadow-blue-500/30'
-                  : 'bg-emerald-600 text-white ring-2 ring-emerald-400 shadow-emerald-500/30'
+            <div
+              className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white border-4 sm:border-[5px] border-red-600 flex flex-col items-center justify-center shadow-lg relative select-none transition-transform ${
+                isSpeedExceeded ? 'ring-4 ring-red-500/80 scale-105 animate-pulse' : ''
               }`}
+              title={`Sebességkorlátozás: ${activeSpeedLimit} km/h${isSpeedExceeded ? ' - Sebességtúllépés!' : ''}`}
             >
-              {roadInfo.roadNumber}
-            </span>
+              <span className="text-black font-black text-xl sm:text-2xl font-mono leading-none tracking-tight">
+                {activeSpeedLimit}
+              </span>
+              <span className="text-[8px] sm:text-[9px] font-black text-zinc-600 leading-none -mt-0.5">
+                km/h
+              </span>
+
+              {/* Distance badge if approaching an ahead speed sign */}
+              {approachingSpeedSign && (
+                <span className="absolute -bottom-2 bg-red-600 text-white font-mono text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-md leading-none">
+                  {Math.round(approachingSpeedSign.distance)}m
+                </span>
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      {/* 2. Permanent Fixed-Height HUD Strip for OSM Features (Zero layout shift / Sávinfo nem ugrál) */}
-      <div className="w-full h-12 sm:h-14 flex items-center justify-between gap-2 shrink-0">
+      {/* 2. Permanent Fixed-Height HUD Strip for OSM Features (Zero layout shift / h-12 sm:h-14) */}
+      <div className="w-full h-12 sm:h-14 max-h-12 sm:max-h-14 flex items-center justify-between gap-2 shrink-0 overflow-hidden">
         <div className="grid grid-cols-4 gap-2 sm:gap-3 w-full h-full">
           {[
             {
@@ -142,12 +225,17 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
             },
             {
               id: 'traffic_sign',
-              icon: '🛑',
-              label: 'Közlekedési tábla',
-              isEnabled: settings.osmFeatures.showTrafficSigns,
-              match: settings.osmFeatures.showTrafficSigns
-                ? nearbyOsmFeatures.find((f) => f.feature.type === 'traffic_sign')
-                : undefined,
+              icon: approachingCityLimit ? '🏙️' : '🛑',
+              label: approachingCityLimit ? 'Településhatár tábla' : 'Közlekedési tábla',
+              isEnabled:
+                settings.osmFeatures.showTrafficSigns || settings.osmFeatures.showCityLimits !== false,
+              match:
+                (settings.osmFeatures.showTrafficSigns
+                  ? nearbyOsmFeatures.find((f) => f.feature.type === 'traffic_sign')
+                  : undefined) ||
+                (settings.osmFeatures.showCityLimits !== false
+                  ? nearbyOsmFeatures.find((f) => f.feature.type === 'city_limit')
+                  : undefined),
               activeColor: 'bg-red-600/35 border-red-400 text-red-300 ring-2 ring-red-500/50',
               badgeColor: 'bg-red-600 text-white',
             },
@@ -168,7 +256,6 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
                 }`}
                 title={item.isEnabled ? item.label : `${item.label} (Kikapcsolva)`}
               >
-                {/* Bigger Icon as requested */}
                 <span className="text-2xl sm:text-3xl leading-none">
                   {item.icon}
                 </span>
@@ -187,11 +274,10 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Lane Information Display (Sáv Információ) & Cockpit Warning Graphic */}
-      {/* User Request: the redundant text row is completely removed; the lane itself is the warning! */}
+      {/* 3. Lane Information Display (Sáv Információ) with STRICT FIXED HEIGHT (h-[160px] sm:h-[175px]) */}
       {displayOptions.showLaneInfo && (
         <div
-          className={`rounded-3xl p-3 sm:p-4 border shadow-xl flex flex-col justify-center transition-colors ${
+          className={`rounded-3xl p-3 sm:p-4 border shadow-xl flex flex-col justify-center transition-colors h-[160px] sm:h-[175px] max-h-[160px] sm:max-h-[175px] shrink-0 overflow-hidden ${
             activeWarning
               ? 'bg-zinc-950 border-red-500/80 ring-2 ring-red-500/30'
               : isDark
@@ -199,20 +285,19 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
               : 'bg-white border-zinc-200 text-zinc-900'
           }`}
         >
-          {/* ASPHALT ROAD & LANE DISPLAY WHERE THE LANE ITSELF IS THE WARNING */}
-          <div className="bg-zinc-950 p-2.5 sm:p-4 rounded-2xl border-2 border-zinc-800 flex flex-col justify-center min-h-[140px] sm:min-h-[155px] relative overflow-hidden">
+          {/* ASPHALT ROAD & LANE DISPLAY */}
+          <div className="bg-zinc-950 p-2 sm:p-3 rounded-2xl border-2 border-zinc-800 flex flex-col justify-center h-full relative overflow-hidden">
             {/* Outer road edge markings */}
             <div className="absolute top-1 left-2 right-2 h-0.5 bg-zinc-600" />
             <div className="absolute bottom-1 left-2 right-2 h-0.5 bg-zinc-600" />
 
             {/* Lane Columns */}
-            <div className="grid grid-flow-col auto-cols-fr gap-2 sm:gap-3 relative z-10 py-1">
+            <div className="grid grid-flow-col auto-cols-fr gap-2 sm:gap-3 relative z-10 py-0.5 h-full items-center">
               {Array.from({ length: directionalLanes }, (_, idx) => {
                 const laneNumber = idx + 1;
                 const isAffectedLane = activeWarning && targetHazardLane === laneNumber;
 
                 if (isAffectedLane) {
-                  // THIS LANE IS THE HAZARD WARNING ITSELF!
                   const hazard = activeWarning.hazard;
                   const hazardHungarian = getHazardNameHungarian(hazard.hazardType).toUpperCase();
                   const lateralText =
@@ -225,19 +310,17 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
                   return (
                     <div
                       key={laneNumber}
-                      className="min-h-[115px] sm:min-h-[125px] rounded-2xl border-2 border-red-400 bg-gradient-to-b from-red-600 via-rose-700 to-red-900 text-white shadow-2xl shadow-red-600/50 flex flex-col items-center justify-between p-2 animate-pulse"
+                      className="h-full rounded-2xl border-2 border-red-400 bg-gradient-to-b from-red-600 via-rose-700 to-red-900 text-white shadow-2xl shadow-red-600/50 flex flex-col items-center justify-between p-1.5 sm:p-2 animate-pulse overflow-hidden"
                     >
-                      {/* Lane Number & Alert Icon */}
-                      <div className="w-full flex items-center justify-between text-[11px] font-black border-b border-white/20 pb-1">
+                      <div className="w-full flex items-center justify-between text-[11px] font-black border-b border-white/20 pb-0.5">
                         <span className="bg-black/40 px-1.5 py-0.5 rounded">{laneNumber}. SÁV</span>
                         <span className="bg-yellow-300 text-black px-1.5 py-0.5 rounded text-[10px] font-black">
                           {Math.round(activeWarning.distance)} m
                         </span>
                       </div>
 
-                      {/* Hazard Type & Emoji in lane */}
-                      <div className="text-center my-1">
-                        <div className="text-2xl sm:text-3xl leading-none mb-1">
+                      <div className="text-center my-0.5">
+                        <div className="text-xl sm:text-2xl leading-none">
                           {hazard.hazardType === 'pothole'
                             ? '🕳️'
                             : hazard.hazardType === 'manhole'
@@ -248,24 +331,22 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
                             ? '⚡'
                             : '⚠️'}
                         </div>
-                        <div className="font-black text-xs sm:text-sm tracking-wide leading-tight">
+                        <div className="font-black text-[11px] sm:text-xs tracking-wide leading-tight truncate">
                           {hazardHungarian}
                         </div>
                       </div>
 
-                      {/* Lateral Position inside this lane */}
-                      <div className="w-full text-center bg-black/50 py-0.5 px-1 rounded-lg text-[10px] sm:text-[11px] font-black text-yellow-300 tracking-wider">
+                      <div className="w-full text-center bg-black/50 py-0.5 px-1 rounded-lg text-[10px] font-black text-yellow-300 tracking-wider">
                         {lateralText}
                       </div>
                     </div>
                   );
                 }
 
-                // Normal / Safe Lane
                 return (
                   <div
                     key={laneNumber}
-                    className={`min-h-[115px] sm:min-h-[125px] rounded-2xl border-2 flex flex-col items-center justify-between p-2 transition-all ${
+                    className={`h-full rounded-2xl border-2 flex flex-col items-center justify-between p-1.5 sm:p-2 transition-all overflow-hidden ${
                       activeWarning
                         ? 'border-emerald-500/40 bg-emerald-950/20 text-emerald-400'
                         : 'border-dashed border-zinc-700 bg-zinc-900/50 text-zinc-300'
@@ -279,7 +360,7 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
                     </div>
 
                     <div className="flex flex-col items-center my-auto">
-                      <ArrowUp className="w-6 h-6 stroke-[3] text-white opacity-80" />
+                      <ArrowUp className="w-5 h-5 stroke-[3] text-white opacity-80" />
                     </div>
 
                     <div className="text-[10px] text-zinc-500 font-medium">
@@ -295,7 +376,7 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
             </div>
 
             {/* Edge labels */}
-            <div className="mt-1 flex justify-between text-[10px] text-zinc-500 font-mono px-2">
+            <div className="flex justify-between text-[9px] text-zinc-500 font-mono px-2">
               <span>◀ Bal padka</span>
               <span>Jobb padka ▶</span>
             </div>
@@ -303,12 +384,12 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
         </div>
       )}
 
-      {/* 3. Speed & Heading HUD */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* 4. Speed & Heading HUD with STRICT FIXED HEIGHT (h-28 sm:h-32) */}
+      <div className="grid grid-cols-2 gap-3 shrink-0">
         {/* Speedometer */}
         {displayOptions.showSpeed && (
           <div
-            className={`rounded-3xl p-4 border shadow-xl flex flex-col items-center justify-center text-center ${
+            className={`rounded-3xl p-4 border shadow-xl flex flex-col items-center justify-center text-center h-28 sm:h-32 max-h-28 sm:max-h-32 shrink-0 overflow-hidden ${
               isDark
                 ? 'bg-zinc-900/80 border-zinc-800 text-white'
                 : 'bg-white border-zinc-200 text-zinc-900'
@@ -328,7 +409,7 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
         {/* Compass & Direction */}
         {displayOptions.showHeading && (
           <div
-            className={`rounded-3xl p-4 border shadow-xl flex flex-col items-center justify-center text-center ${
+            className={`rounded-3xl p-4 border shadow-xl flex flex-col items-center justify-center text-center h-28 sm:h-32 max-h-28 sm:max-h-32 shrink-0 overflow-hidden ${
               isDark
                 ? 'bg-zinc-900/80 border-zinc-800 text-white'
                 : 'bg-white border-zinc-200 text-zinc-900'
@@ -348,14 +429,14 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
         )}
       </div>
 
-      {/* 4. Giant Driver Quick-Record Button: "ÚTHIBA RÖGZÍTÉSE" */}
-      <div className="pt-1">
+      {/* 5. Giant Driver Quick-Record Button with STRICT FIXED HEIGHT (h-16 sm:h-20) */}
+      <div className="pt-0.5 shrink-0 h-16 sm:h-20 max-h-16 sm:max-h-20">
         <button
           type="button"
           onClick={onTriggerRecordHazard}
-          className="w-full py-5 sm:py-7 px-6 rounded-3xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-2xl sm:text-3xl md:text-4xl shadow-2xl shadow-red-600/40 border-2 border-white/30 flex items-center justify-center gap-3 sm:gap-4 transition-transform active:scale-97 cursor-pointer"
+          className="w-full h-full rounded-3xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-2xl sm:text-3xl md:text-4xl shadow-2xl shadow-red-600/40 border-2 border-white/30 flex items-center justify-center gap-3 sm:gap-4 transition-transform active:scale-97 cursor-pointer"
         >
-          <AlertOctagon className="w-8 h-8 sm:w-10 sm:h-10 text-white animate-bounce shrink-0" />
+          <AlertOctagon className="w-7 h-7 sm:w-9 sm:h-9 text-white animate-bounce shrink-0" />
           <span className="tracking-tight text-center drop-shadow-md">
             ÚTHIBA RÖGZÍTÉSE
           </span>

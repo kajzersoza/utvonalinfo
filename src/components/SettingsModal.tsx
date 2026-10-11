@@ -17,6 +17,7 @@ import {
   MapPin,
   RefreshCw,
   Compass,
+  Navigation,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -688,6 +689,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </p>
               </div>
 
+              {/* Alert Distance & Approach-Only Direction Rule Card */}
+              <div className="bg-zinc-800/80 p-4 rounded-2xl border border-zinc-700/80 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <Navigation className="w-4 h-4 text-amber-400" />
+                    <span className="font-bold text-xs text-zinc-200 uppercase tracking-wider">
+                      Beállított Jelzési Távolság (OSM & Úthibák):
+                    </span>
+                  </div>
+                  <span className="font-mono text-xs font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30">
+                    {settings.voiceOptions.hazardWarningDistanceMeters || 200} méter
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[100, 150, 200, 300, 500, 1000].map((meters) => (
+                    <button
+                      key={meters}
+                      type="button"
+                      onClick={() =>
+                        onUpdateSettings({
+                          ...settings,
+                          voiceOptions: {
+                            ...settings.voiceOptions,
+                            hazardWarningDistanceMeters: meters,
+                          },
+                        })
+                      }
+                      className={`flex-1 min-w-[54px] py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                        (settings.voiceOptions.hazardWarningDistanceMeters || 200) === meters
+                          ? 'bg-amber-600 text-white border-amber-500 font-black shadow-md shadow-amber-600/30'
+                          : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-white hover:bg-zinc-700'
+                      }`}
+                    >
+                      {meters}m
+                    </button>
+                  ))}
+                </div>
+
+                <div className="p-2.5 bg-zinc-900/80 rounded-xl border border-zinc-800 flex items-start gap-2">
+                  <span className="text-base leading-none">🧭</span>
+                  <p className="text-[11px] text-zinc-300 leading-relaxed">
+                    <strong className="text-amber-300">Közeledési szabály:</strong> A vasúti átjárókra, gyalogátkelőkre, jelzőlámpákra és táblákra pontosan a fenti távolság vonatkozik. A rendszer <strong className="text-emerald-400">kizárólag közeledéskor jelez</strong> (szélvédő előtt haladva); távolodáskor vagy az elemen való áthaladás után azonnal elhallgat!
+                  </p>
+                </div>
+              </div>
+
               {/* Individual Feature Settings: SHOW vs ANNOUNCE */}
               <div className="space-y-3">
                 <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">
@@ -926,6 +974,66 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           onUpdateSettings({
                             ...settings,
                             osmFeatures: { ...settings.osmFeatures, announceTrafficSigns: e.target.checked },
+                          })
+                        }
+                        className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* 5. City Limits (Településhatár / Várostábla) */}
+                <div className="p-4 bg-zinc-800/60 border border-zinc-700/80 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-2xl">🏙️</span>
+                      <div>
+                        <div className="font-bold text-sm text-white">Településhatár Táblák (Várostábla)</div>
+                        <div className="text-[11px] text-zinc-400">Lakott terület kezdete és vége jelzőtáblák (50 km/h)</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => audioAlertService.playTypeChime('city_limit', settings.soundAlerts)}
+                      className="px-2.5 py-1 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-cyan-300 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Hangminta lejátszása"
+                    >
+                      <Play className="w-3 h-3" />
+                      <span>Hang</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-zinc-700/60">
+                    <label className="flex items-center justify-between p-2.5 bg-zinc-900/60 rounded-xl cursor-pointer hover:bg-zinc-900 border border-zinc-800">
+                      <span className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 text-blue-400" />
+                        Mutassa a térképen / HUD-on
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={settings.osmFeatures.showCityLimits !== false}
+                        onChange={(e) =>
+                          onUpdateSettings({
+                            ...settings,
+                            osmFeatures: { ...settings.osmFeatures, showCityLimits: e.target.checked },
+                          })
+                        }
+                        className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between p-2.5 bg-zinc-900/60 rounded-xl cursor-pointer hover:bg-zinc-900 border border-zinc-800">
+                      <span className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                        <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                        Mondja be hangosan közeledéskor
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={settings.osmFeatures.announceCityLimits !== false}
+                        onChange={(e) =>
+                          onUpdateSettings({
+                            ...settings,
+                            osmFeatures: { ...settings.osmFeatures, announceCityLimits: e.target.checked },
                           })
                         }
                         className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
@@ -1231,19 +1339,76 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   />
                 </label>
 
-                {/* Show Road Number */}
+                {/* Show Road Number when no street */}
                 <label className="flex items-center justify-between p-3.5 bg-zinc-800/40 border border-zinc-700/60 rounded-xl cursor-pointer hover:bg-zinc-800">
-                  <span className="font-semibold text-sm">+ Út száma (pl. M7 jelvény)</span>
+                  <div className="pr-3">
+                    <span className="font-semibold text-sm block">Út száma az utca helyén (ha nincs külön utcanév)</span>
+                    <span className="text-xs text-zinc-400 block mt-0.5">
+                      Csak egyetlen helyen jelenik meg az út száma; ha nincs utcanév, akkor az utca sorában jelzi (pl. M7 Autópálya, 8-as főút).
+                    </span>
+                  </div>
                   <input
                     type="checkbox"
-                    checked={settings.displayOptions.showRoadNumber}
+                    checked={settings.displayOptions.showRoadNumberWhenNoStreet !== false}
                     onChange={(e) =>
                       onUpdateSettings({
                         ...settings,
-                        displayOptions: { ...settings.displayOptions, showRoadNumber: e.target.checked },
+                        displayOptions: {
+                          ...settings.displayOptions,
+                          showRoadNumberWhenNoStreet: e.target.checked,
+                          showRoadNumber: e.target.checked,
+                        },
                       })
                     }
-                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer shrink-0"
+                  />
+                </label>
+
+                {/* Show Speed Limit Sign */}
+                <label className="flex items-center justify-between p-3.5 bg-zinc-800/40 border border-zinc-700/60 rounded-xl cursor-pointer hover:bg-zinc-800">
+                  <div className="pr-3">
+                    <span className="font-semibold text-sm block">Sebességkorlátozás tábla (a város kártyán jobbra)</span>
+                    <span className="text-xs text-zinc-400 block mt-0.5">
+                      Megjeleníti a megengedett legnagyobb sebesség (50, 70, 90, 130 km/h) kerek piros szegélyes tábláját a város kártya jobb szélén.
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={settings.displayOptions.showSpeedLimit !== false}
+                    onChange={(e) =>
+                      onUpdateSettings({
+                        ...settings,
+                        displayOptions: {
+                          ...settings.displayOptions,
+                          showSpeedLimit: e.target.checked,
+                        },
+                      })
+                    }
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer shrink-0"
+                  />
+                </label>
+
+                {/* Show City Limit (Várostábla) Sign */}
+                <label className="flex items-center justify-between p-3.5 bg-zinc-800/40 border border-zinc-700/60 rounded-xl cursor-pointer hover:bg-zinc-800">
+                  <div className="pr-3">
+                    <span className="font-semibold text-sm block">Településhatár tábla (Várostábla) jelvény</span>
+                    <span className="text-xs text-zinc-400 block mt-0.5">
+                      Fehér helységnévtábla jelvény megjelenítése lakott területre való behajtáskor (pl. [ BUDAÖRS ]).
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={settings.displayOptions.showCityLimitSign !== false}
+                    onChange={(e) =>
+                      onUpdateSettings({
+                        ...settings,
+                        displayOptions: {
+                          ...settings.displayOptions,
+                          showCityLimitSign: e.target.checked,
+                        },
+                      })
+                    }
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer shrink-0"
                   />
                 </label>
 

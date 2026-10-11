@@ -141,6 +141,12 @@ class AudioAlertService {
         this.playTone(783.99, 100, vol * 0.75, 'sine', 0); // G5
         break;
 
+      case 'city_limit': // Településhatár / Várostábla: Dallamos helységnév szignál (C5 - E5 - G5)
+        this.playTone(523.25, 100, vol * 0.8, 'sine', 0);
+        this.playTone(659.25, 110, vol * 0.8, 'sine', 110);
+        this.playTone(783.99, 130, vol * 0.85, 'sine', 230);
+        break;
+
       case 'crack': // Repedés: Éles, száraz kettős kattanás
         this.playTone(1100, 40, vol * 0.8, 'square', 0);
         this.playTone(1450, 50, vol * 0.75, 'square', 55);
@@ -201,11 +207,11 @@ class AudioAlertService {
   /**
    * Main audio handler for an approaching OSM feature (zebra, railway, etc.)
    */
-  public triggerFeatureAudio(type: OSMFeatureType, options: SoundAlertOptions) {
+  public triggerFeatureAudio(type: OSMFeatureType, options: SoundAlertOptions, featureId?: string) {
     if (!options.enabled || options.alertMode === 'voice_only') return;
 
     const now = Date.now();
-    const key = `osm-${type}`;
+    const key = featureId ? `osm-${featureId}` : `osm-${type}`;
     if (this.lastAlertKey === key && now - this.lastAlertTime < 5000) {
       return;
     }

@@ -750,6 +750,7 @@ export const MapView: React.FC<MapViewProps> = ({
       if (feat.type === 'railway' && !osmFeatureVisibility.showRailways) return;
       if (feat.type === 'traffic_signals' && !osmFeatureVisibility.showTrafficSignals) return;
       if (feat.type === 'traffic_sign' && !osmFeatureVisibility.showTrafficSigns) return;
+      if (feat.type === 'city_limit' && osmFeatureVisibility.showCityLimits === false) return;
 
       const icon =
         feat.type === 'crossing'
@@ -758,6 +759,8 @@ export const MapView: React.FC<MapViewProps> = ({
           ? '🚂'
           : feat.type === 'traffic_signals'
           ? '🚦'
+          : feat.type === 'city_limit'
+          ? '🏙️'
           : '🛑';
 
       const borderColor =
@@ -767,6 +770,8 @@ export const MapView: React.FC<MapViewProps> = ({
           ? '#eab308'
           : feat.type === 'traffic_signals'
           ? '#10b981'
+          : feat.type === 'city_limit'
+          ? '#a855f7'
           : '#ef4444';
 
       const osmIconHtml = `
