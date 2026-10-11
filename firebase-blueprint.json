@@ -1,0 +1,169 @@
+{
+  "entities": {
+    "Admin": {
+      "title": "Admin",
+      "description": "Administrator record for authorized moderators",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Email address of the admin"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "superadmin"],
+          "description": "Administrative role title"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of admin registration"
+        }
+      },
+      "required": ["email", "role", "createdAt"]
+    },
+    "RoadHazard": {
+      "title": "Road Hazard",
+      "description": "Reported road obstacle or road condition issue",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique identifier of the hazard"
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Epoch timestamp in milliseconds"
+        },
+        "latitude": {
+          "type": "number",
+          "description": "WGS84 latitude"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "WGS84 longitude"
+        },
+        "heading": {
+          "type": "number",
+          "description": "Direction of travel (0-359 degrees)"
+        },
+        "speed": {
+          "type": "number",
+          "description": "Speed in km/h at recording time"
+        },
+        "accuracy": {
+          "type": "number",
+          "description": "GPS accuracy in meters"
+        },
+        "roadNumber": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Designation of road, e.g. M7, 8, 6101"
+        },
+        "roadName": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Street or route name"
+        },
+        "city": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Settlement or district"
+        },
+        "postcode": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Postal code"
+        },
+        "laneCount": {
+          "type": "number",
+          "description": "Total lanes in travel direction"
+        },
+        "lateralPosition": {
+          "type": "string",
+          "enum": ["left", "center", "right"],
+          "description": "Position within lane"
+        },
+        "laneNumber": {
+          "type": "number",
+          "description": "Lane number where 1 is innermost"
+        },
+        "hazardType": {
+          "type": "string",
+          "enum": ["pothole", "manhole", "rutting", "crack", "subsidence", "debris", "speedbump", "other"],
+          "description": "Classification of the road defect"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"],
+          "description": "Severity assessment"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional notes and driver observations"
+        },
+        "resolved": {
+          "type": "boolean",
+          "description": "Whether the hazard has been repaired or cleared"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "verified", "resolved"],
+          "description": "Lifecycle status of the report"
+        },
+        "verifiedByAdmin": {
+          "type": "boolean",
+          "description": "Whether verified and certified by an administrator"
+        },
+        "isPublic": {
+          "type": "boolean",
+          "description": "Whether visible to the online community"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Firebase Auth UID of the reporting driver"
+        },
+        "userEmail": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Email address of the submitter"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp ISO string"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Update timestamp ISO string"
+        }
+      },
+      "required": [
+        "id",
+        "timestamp",
+        "latitude",
+        "longitude",
+        "heading",
+        "roadName",
+        "hazardType",
+        "severity",
+        "userId",
+        "isPublic",
+        "status"
+      ]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": "Admin",
+      "description": "Admins registry for privileged access and moderation"
+    },
+    "/roadHazards/{hazardId}": {
+      "schema": "RoadHazard",
+      "description": "Crowdsourced road condition and hazard database"
+    }
+  }
+}

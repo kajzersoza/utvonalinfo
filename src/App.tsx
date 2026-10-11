@@ -6,6 +6,8 @@ import {
   AppSettings,
   OSMFeature,
   OSMFeatureVisibility,
+  UserProfile,
+  HazardFilterMode,
 } from './types';
 import {
   loadSettings,
@@ -22,6 +24,15 @@ import {
   calculateBearing,
   isHazardAheadInDirection,
 } from './services/geoService';
+import {
+  subscribeToAuth,
+  subscribeToCloudHazards,
+  saveHazardToCloud,
+  deleteHazardFromCloud,
+  updateHazardInCloud,
+  logoutUser,
+  testConnection,
+} from './services/firebase';
 
 import { Header } from './components/Header';
 import { CockpitView } from './components/CockpitView';
@@ -30,14 +41,30 @@ import { HazardList } from './components/HazardList';
 import { HazardModal } from './components/HazardModal';
 import { SettingsModal } from './components/SettingsModal';
 import { SimulatorControls } from './components/SimulatorControls';
+import { AuthModal } from './components/AuthModal';
+import { AdminPanelModal } from './components/AdminPanelModal';
 
 export default function App() {
-  // 1. Persistent State
+  // 1. Persistent Local Settings & Local Hazards
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
-  const [hazards, setHazards] = useState<RoadHazard[]>(() => loadHazards());
+  const [localHazards, setLocalHazards] = useState<RoadHazard[]>(() => loadHazards());
   const [osmFeatures, setOsmFeatures] = useState<OSMFeature[]>(SAMPLE_OSM_FEATURES);
 
-  // 2. Navigation State - Mobil nézetben a műszerfal a kezdő képernyő
+  // 2. Firebase Cloud State & User Profile
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [cloudHazards, setCloudHazards] = useState<RoadHazard[]>([]);
+  const [filterMode, setFilterMode] = useState<HazardFilterMode>('all_online');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Toast helper
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3500);
+  }, []);
+
+  // 3. Navigation State - Mobil nézetben a műszerfal a kezdő képernyő
   const [activeTab, setActiveTab] = useState<'split' | 'cockpit' | 'map' | 'list'>(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
       return 'cockpit';
@@ -45,7 +72,7 @@ export default function App() {
     return 'split';
   });
 
-  // 3. Cockpit & GPS State
+  // 4. Cockpit & GPS State
   const [gps, setGps] = useState<GPSState>({
     latitude: 47.4762,
     longitude: 19.0285,
@@ -68,13 +95,15 @@ export default function App() {
 
   const prevRoadInfoRef = useRef<RoadInfo | null>(null);
 
-  // 4. Modals State
+  // 5. Modals State
   const [isHazardModalOpen, setIsHazardModalOpen] = useState(false);
   const [modalInitialHazard, setModalInitialHazard] = useState<Partial<RoadHazard> | null>(null);
   const [isEditingHazard, setIsEditingHazard] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
-  // 5. Simulator State
+  // 6. Simulator State
   const [isSimulating, setIsSimulating] = useState(false);
   const [isPlayingSimulation, setIsPlayingSimulation] = useState(false);
   const [activeRouteKey, setActiveRouteKey] = useState<string>('m7');
@@ -86,10 +115,64 @@ export default function App() {
     saveSettings(settings);
   }, [settings]);
 
-  // Save hazards when changed
+  // Save local hazards when changed
   useEffect(() => {
-    saveHazards(hazards);
-  }, [hazards]);
+    saveHazards(localHazards);
+  }, [localHazards]);
+
+  // Boot Test Connection to Firestore
+  useEffect(() => {
+    testConnection();
+  }, []);
+
+  // Subscribe to Firebase Auth
+  useEffect(() => {
+    const unsub = subscribeToAuth((userProfile) => {
+      setCurrentUser(userProfile);
+      if (userProfile) {
+        showToast(`Üdvözlünk, ${userProfile.displayName || userProfile.email}!`);
+      }
+    });
+    return () => unsub();
+  }, [showToast]);
+
+  // Subscribe to Cloud Firestore Road Hazards
+  useEffect(() => {
+    const unsub = subscribeToCloudHazards(
+      (hazards) => {
+        setCloudHazards(hazards);
+      },
+      (err) => {
+        console.warn('Hiba az online úthibák szinkronizálásakor:', err);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // Compute Active Displayed Hazards based on filterMode
+  const activeHazards = useMemo(() => {
+    if (filterMode === 'all_online') {
+      return cloudHazards;
+    }
+    if (filterMode === 'my_hazards') {
+      if (!currentUser) return [];
+      return cloudHazards.filter((h) => h.userId === currentUser.uid);
+    }
+    if (filterMode === 'local_only') {
+      return localHazards;
+    }
+    // Combined mode: Merge cloud + local without duplicates
+    const map = new Map<string, RoadHazard>();
+    for (const h of cloudHazards) {
+      map.set(h.id, h);
+    }
+    for (const h of localHazards) {
+      if (!map.has(h.id)) {
+        map.set(h.id, h);
+      }
+    }
+    return Array.from(map.values());
+  }, [filterMode, cloudHazards, localHazards, currentUser]);
 
   // -------------------------------------------------------------
   // Proximity & Direction Hazard Warning Check
@@ -104,7 +187,7 @@ export default function App() {
       const maxDistance = settings.voiceOptions.hazardWarningDistanceMeters || 200;
       const matches: { hazard: RoadHazard; distance: number }[] = [];
 
-      for (const h of hazards) {
+      for (const h of activeHazards) {
         // STRICT CHECK: strictly matching direction of travel, in front of vehicle (előrejelezve), and once passed: NO alert!
         const { isAhead, distance } = isHazardAheadInDirection(
           currentLat,
@@ -126,7 +209,7 @@ export default function App() {
       matches.sort((a, b) => a.distance - b.distance);
       setApproachingHazards(matches);
     },
-    [hazards, settings.voiceOptions]
+    [activeHazards, settings.voiceOptions]
   );
 
   // -------------------------------------------------------------
@@ -259,7 +342,7 @@ export default function App() {
         status: 'simulated',
       });
 
-      const simulatedRoad: RoadInfo = {
+      setRoadInfo({
         roadNumber: pt.roadNumber,
         roadName: pt.roadName,
         houseNumber: pt.houseNumber,
@@ -267,70 +350,60 @@ export default function App() {
         postcode: pt.postcode,
         lanes: pt.lanes,
         source: 'simulated',
-      };
-      setRoadInfo(simulatedRoad);
-
-      speechService.announceRoadUpdate(
-        prevRoadInfoRef.current,
-        simulatedRoad,
-        settings.voiceOptions
-      );
-      prevRoadInfoRef.current = simulatedRoad;
+      });
 
       checkApproachingHazards(pt.lat, pt.lon, pt.heading);
       return nextIdx;
     });
-  }, [getSelectedRoute, settings.voiceOptions, checkApproachingHazards]);
+  }, [getSelectedRoute, checkApproachingHazards]);
 
+  // Simulation Interval Loop
   useEffect(() => {
     if (!isSimulating || !isPlayingSimulation) return;
 
-    const intervalMs = Math.max(800, 3200 / simSpeedMultiplier);
-    const timer = setInterval(() => {
-      advanceSimulationStep();
-    }, intervalMs);
+    const intervalMs = Math.max(300, 1000 / simSpeedMultiplier);
+    const intervalId = setInterval(advanceSimulationStep, intervalMs);
 
-    return () => clearInterval(timer);
+    return () => clearInterval(intervalId);
   }, [isSimulating, isPlayingSimulation, simSpeedMultiplier, advanceSimulationStep]);
 
-  // Start Simulation
-  const handleStartSimulation = () => {
+  const handleStartSimulation = useCallback(() => {
     setIsSimulating(true);
     setIsPlayingSimulation(true);
     setSimStepIndex(0);
     const route = getSelectedRoute();
-    const pt = route[0];
-    setGps({
-      latitude: pt.lat,
-      longitude: pt.lon,
-      heading: pt.heading,
-      speed: pt.speed,
-      accuracy: 3,
-      timestamp: Date.now(),
-      status: 'simulated',
-    });
-    setRoadInfo({
-      roadNumber: pt.roadNumber,
-      roadName: pt.roadName,
-      houseNumber: pt.houseNumber,
-      city: pt.city,
-      postcode: pt.postcode,
-      lanes: pt.lanes,
-      source: 'simulated',
-    });
-  };
+    if (route.length > 0) {
+      const pt = route[0];
+      setGps({
+        latitude: pt.lat,
+        longitude: pt.lon,
+        heading: pt.heading,
+        speed: pt.speed,
+        accuracy: 3,
+        timestamp: Date.now(),
+        status: 'simulated',
+      });
+      setRoadInfo({
+        roadNumber: pt.roadNumber,
+        roadName: pt.roadName,
+        houseNumber: pt.houseNumber,
+        city: pt.city,
+        postcode: pt.postcode,
+        lanes: pt.lanes,
+        source: 'simulated',
+      });
+    }
+  }, [getSelectedRoute]);
 
-  const handleStopSimulation = () => {
+  const handleStopSimulation = useCallback(() => {
     setIsSimulating(false);
     setIsPlayingSimulation(false);
-    setGps((prev) => ({ ...prev, status: 'locating' }));
-  };
+  }, []);
 
   // -------------------------------------------------------------
-  // Quick Record Hazard Handler ("ÚTHIBA RÖGZÍTÉSE" button)
+  // User Actions: Record, Edit, Delete, Sync Hazards
   // -------------------------------------------------------------
   const handleTriggerRecordHazard = () => {
-    // Capture snapshot of exact current state
     const snapshot: Partial<RoadHazard> = {
       latitude: gps.latitude,
       longitude: gps.longitude,
@@ -342,11 +415,12 @@ export default function App() {
       city: roadInfo.city,
       postcode: roadInfo.postcode,
       laneCount: roadInfo.lanes || 2,
-      lateralPosition: 'right', // default to right lane/edge
+      lateralPosition: 'right',
       laneNumber: roadInfo.lanes || 2,
       hazardType: 'pothole',
       severity: 'medium',
       timestamp: Date.now(),
+      isOnline: Boolean(currentUser),
     };
 
     setModalInitialHazard(snapshot);
@@ -354,7 +428,6 @@ export default function App() {
     setIsHazardModalOpen(true);
   };
 
-  // Add Hazard from Map Click with async OSM reverse geocoding
   const handleAddHazardAtLocation = useCallback(
     async (lat: number, lon: number, heading: number) => {
       let rName = roadInfo.roadName || 'Kijelölt útszakasz';
@@ -371,7 +444,7 @@ export default function App() {
         if (osm.postcode) rPostcode = osm.postcode;
         if (osm.lanes) rLanes = osm.lanes;
       } catch {
-        // Fallback to current roadInfo
+        // Fallback
       }
 
       const snapshot: Partial<RoadHazard> = {
@@ -390,42 +463,138 @@ export default function App() {
         hazardType: 'pothole',
         severity: 'medium',
         timestamp: Date.now(),
+        isOnline: Boolean(currentUser),
       };
 
       setModalInitialHazard(snapshot);
       setIsEditingHazard(false);
       setIsHazardModalOpen(true);
     },
-    [roadInfo]
+    [roadInfo, currentUser]
   );
 
-  // Edit Existing Hazard
   const handleEditHazard = useCallback((hazard: RoadHazard) => {
     setModalInitialHazard(hazard);
     setIsEditingHazard(true);
     setIsHazardModalOpen(true);
   }, []);
 
-  // Delete Hazard
-  const handleDeleteHazard = useCallback((id: string) => {
-    setHazards((prev) => prev.filter((h) => h.id !== id));
-  }, []);
+  const handleDeleteHazard = useCallback(
+    async (id: string) => {
+      // Check if it's in cloud
+      const inCloud = cloudHazards.some((h) => h.id === id);
+      if (inCloud) {
+        try {
+          await deleteHazardFromCloud(id);
+          showToast('🗑️ Úthiba törölve a felhőből.');
+        } catch {
+          showToast('Hiba a felhőbeli törlés során.');
+        }
+      }
+      // Also clean up local if exists
+      setLocalHazards((prev) => prev.filter((h) => h.id !== id));
+    },
+    [cloudHazards, showToast]
+  );
 
-  // Update Hazard Position (Drag-and-Drop on Map)
-  const handleUpdateHazardPosition = useCallback((id: string, lat: number, lon: number) => {
-    setHazards((prev) =>
-      prev.map((h) => (h.id === id ? { ...h, latitude: lat, longitude: lon } : h))
-    );
-  }, []);
+  const handleUpdateHazardPosition = useCallback(
+    async (id: string, lat: number, lon: number) => {
+      const inCloud = cloudHazards.some((h) => h.id === id);
+      if (inCloud) {
+        try {
+          await updateHazardInCloud(id, { latitude: lat, longitude: lon });
+        } catch {
+          // Fallback
+        }
+      }
+      setLocalHazards((prev) =>
+        prev.map((h) => (h.id === id ? { ...h, latitude: lat, longitude: lon } : h))
+      );
+    },
+    [cloudHazards]
+  );
 
-  // Update Hazard Heading (Rotation on Map)
-  const handleUpdateHazardHeading = useCallback((id: string, heading: number) => {
-    setHazards((prev) =>
-      prev.map((h) => (h.id === id ? { ...h, heading: (heading % 360 + 360) % 360 } : h))
-    );
-  }, []);
+  const handleUpdateHazardHeading = useCallback(
+    async (id: string, heading: number) => {
+      const normalized = (heading % 360 + 360) % 360;
+      const inCloud = cloudHazards.some((h) => h.id === id);
+      if (inCloud) {
+        try {
+          await updateHazardInCloud(id, { heading: normalized });
+        } catch {
+          // Fallback
+        }
+      }
+      setLocalHazards((prev) =>
+        prev.map((h) => (h.id === id ? { ...h, heading: normalized } : h))
+      );
+    },
+    [cloudHazards]
+  );
 
-  // Toggle OSM Feature Visibility
+  const handleSaveHazard = useCallback(
+    async (savedHazard: RoadHazard, saveToCloud: boolean) => {
+      if (saveToCloud) {
+        if (!currentUser) {
+          // If not logged in, prompt user to log in or save locally
+          setIsAuthModalOpen(true);
+          showToast('Jelentkezz be email címeddel a felhőbe töltéshez!');
+          return;
+        }
+
+        try {
+          await saveHazardToCloud(savedHazard, currentUser);
+          // Remove from local storage if it was there
+          setLocalHazards((prev) => prev.filter((h) => h.id !== savedHazard.id));
+          showToast('☁️ Úthiba sikeresen feltöltve a felhőbe!');
+        } catch (e) {
+          showToast('Hiba a felhőbe mentéskor, helyileg mentve.');
+          setLocalHazards((prev) => [savedHazard, ...prev.filter((h) => h.id !== savedHazard.id)]);
+        }
+      } else {
+        // Save only locally
+        setLocalHazards((prev) => {
+          const idx = prev.findIndex((h) => h.id === savedHazard.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = savedHazard;
+            return next;
+          }
+          return [savedHazard, ...prev];
+        });
+        showToast('💾 Úthiba elmentve ezen az eszközön.');
+      }
+    },
+    [currentUser, showToast]
+  );
+
+  // Sync local hazards to cloud
+  const handleSyncLocalToCloud = useCallback(async () => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      showToast('Kérlek jelentkezz be a helyi hibák feltöltéséhez!');
+      return;
+    }
+
+    if (localHazards.length === 0) {
+      showToast('Nincsenek helyi adatok a feltöltéshez.');
+      return;
+    }
+
+    let successCount = 0;
+    for (const h of localHazards) {
+      try {
+        await saveHazardToCloud(h, currentUser);
+        successCount++;
+      } catch {
+        // Ignore single failures
+      }
+    }
+
+    setLocalHazards([]);
+    showToast(`☁️ ${successCount} helyi úthiba sikeresen feltöltve a felhőbe!`);
+  }, [currentUser, localHazards, showToast]);
+
   const handleToggleOsmFeatureVisibility = useCallback((key: keyof OSMFeatureVisibility) => {
     setSettings((prev) => ({
       ...prev,
@@ -436,63 +605,49 @@ export default function App() {
     }));
   }, []);
 
-  // Save (Create or Update) Hazard
-  const handleSaveHazard = useCallback((savedHazard: RoadHazard) => {
-    setHazards((prev) => {
-      const existingIdx = prev.findIndex((h) => h.id === savedHazard.id);
-      if (existingIdx >= 0) {
-        const next = [...prev];
-        next[existingIdx] = savedHazard;
-        return next;
-      } else {
-        return [savedHazard, ...prev];
-      }
-    });
-
-    // Provide friendly audio feedback
-    if (settings.voiceOptions.enabled) {
-      speechService.speak(
-        `${savedHazard.hazardType} sikeresen rögzítve a ${savedHazard.roadName} szakaszon.`,
-        settings.voiceOptions
-      );
-    }
-  }, [settings.voiceOptions]);
-
-  const handleToggleVoice = () => {
-    setSettings((prev) => ({
-      ...prev,
-      voiceOptions: {
-        ...prev.voiceOptions,
-        enabled: !prev.voiceOptions.enabled,
-      },
-    }));
-  };
-
-  const handleToggleTheme = () => {
-    setSettings((prev) => ({
-      ...prev,
-      theme: prev.theme === 'dark' ? 'light' : 'dark',
-    }));
+  const handleLogout = async () => {
+    await logoutUser();
+    showToast('Kijelentkezve.');
   };
 
   const isDark = settings.theme === 'dark';
 
   return (
     <div
-      className={`min-h-screen flex flex-col transition-colors font-sans ${
-        isDark ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-900'
+      className={`min-h-screen flex flex-col font-sans transition-colors duration-200 select-none ${
+        isDark ? 'bg-zinc-950 text-white' : 'bg-zinc-50 text-zinc-900'
       }`}
     >
-      {/* 1. Header Bar with Sound icon right next to theme toggle */}
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-4 right-4 z-50 bg-blue-600 text-white px-5 py-3 rounded-2xl shadow-2xl text-xs sm:text-sm font-black animate-in fade-in slide-in-from-top-2 border border-blue-400">
+          {toastMessage}
+        </div>
+      )}
+
+      {/* 1. Header Navigation Bar */}
       <Header
         settings={settings}
         gps={gps}
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        onToggleTheme={handleToggleTheme}
-        onToggleVoice={handleToggleVoice}
-        hazardCount={hazards.length}
+        onToggleTheme={() =>
+          setSettings((prev) => ({ ...prev, theme: prev.theme === 'dark' ? 'light' : 'dark' }))
+        }
+        onToggleVoice={() =>
+          setSettings((prev) => ({
+            ...prev,
+            voiceOptions: { ...prev.voiceOptions, enabled: !prev.voiceOptions.enabled },
+          }))
+        }
+        hazardCount={activeHazards.length}
+        user={currentUser}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onLogout={handleLogout}
+        onOpenAdmin={() => setIsAdminPanelOpen(true)}
+        filterMode={filterMode}
+        onChangeFilterMode={setFilterMode}
         simulatorControls={
           <SimulatorControls
             isSimulating={isSimulating}
@@ -535,12 +690,12 @@ export default function App() {
               <MapView
                 key="split-map"
                 gps={gps}
-                hazards={hazards}
+                hazards={activeHazards}
                 osmFeatures={osmFeatures}
                 osmFeatureVisibility={settings.osmFeatures}
                 onToggleOsmFeatureVisibility={handleToggleOsmFeatureVisibility}
                 onAddHazardAtLocation={handleAddHazardAtLocation}
-                onSaveHazard={handleSaveHazard}
+                onSaveHazard={(h) => handleSaveHazard(h, Boolean(currentUser))}
                 onEditHazard={handleEditHazard}
                 onDeleteHazard={handleDeleteHazard}
                 onUpdateHazardPosition={handleUpdateHazardPosition}
@@ -572,12 +727,12 @@ export default function App() {
             <MapView
               key="full-map"
               gps={gps}
-              hazards={hazards}
+              hazards={activeHazards}
               osmFeatures={osmFeatures}
               osmFeatureVisibility={settings.osmFeatures}
               onToggleOsmFeatureVisibility={handleToggleOsmFeatureVisibility}
               onAddHazardAtLocation={handleAddHazardAtLocation}
-              onSaveHazard={handleSaveHazard}
+              onSaveHazard={(h) => handleSaveHazard(h, Boolean(currentUser))}
               onEditHazard={handleEditHazard}
               onDeleteHazard={handleDeleteHazard}
               onUpdateHazardPosition={handleUpdateHazardPosition}
@@ -591,16 +746,22 @@ export default function App() {
         {activeTab === 'list' && (
           <div className="flex-1 max-w-4xl w-full mx-auto h-full">
             <HazardList
-              hazards={hazards}
+              hazards={activeHazards}
               onEdit={handleEditHazard}
               onDelete={handleDeleteHazard}
               settings={settings}
+              user={currentUser}
+              filterMode={filterMode}
+              onChangeFilterMode={setFilterMode}
+              onSyncLocalToCloud={handleSyncLocalToCloud}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
+              localCount={localHazards.length}
             />
           </div>
         )}
       </main>
 
-      {/* 3. Mobile Bottom Navigation Bar (Driver-friendly high contrast) */}
+      {/* 3. Mobile Bottom Navigation Bar */}
       <nav
         className={`lg:hidden border-t px-2 py-2 flex items-center justify-around select-none shrink-0 ${
           isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-white border-zinc-200'
@@ -647,7 +808,7 @@ export default function App() {
           }`}
         >
           <span className="text-xl">📋</span>
-          <span>Hibák ({hazards.length})</span>
+          <span>Hibák ({activeHazards.length})</span>
         </button>
       </nav>
 
@@ -659,6 +820,8 @@ export default function App() {
         onDelete={handleDeleteHazard}
         initialHazard={modalInitialHazard}
         isEditing={isEditingHazard}
+        user={currentUser}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
       />
 
       {/* 5. Settings Modal */}
@@ -667,8 +830,33 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         onUpdateSettings={setSettings}
-        hazards={hazards}
-        onImportHazards={(newHazards) => setHazards(newHazards)}
+        hazards={activeHazards}
+        onImportHazards={(newHazards) => setLocalHazards(newHazards)}
+      />
+
+      {/* 6. Auth Modal (Registration & Login with Email / Google) */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        isDark={isDark}
+      />
+
+      {/* 7. Admin Panel Modal (Moderation, Verification, Global Hazard Control) */}
+      <AdminPanelModal
+        isOpen={isAdminPanelOpen}
+        onClose={() => setIsAdminPanelOpen(false)}
+        isDark={isDark}
+        user={currentUser}
+        hazards={cloudHazards}
+        onSelectHazard={(hazard) => {
+          setGps((prev) => ({
+            ...prev,
+            latitude: hazard.latitude,
+            longitude: hazard.longitude,
+            heading: hazard.heading,
+          }));
+          setActiveTab('map');
+        }}
       />
     </div>
   );

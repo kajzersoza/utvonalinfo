@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RoadHazard, AppSettings } from '../types';
+import { RoadHazard, AppSettings, UserProfile, HazardFilterMode } from '../types';
 import { getCardinalDirectionShort } from '../services/geoService';
 import { speechService } from '../services/speechService';
 import {
@@ -14,6 +14,14 @@ import {
   AlertTriangle,
   Check,
   X,
+  Cloud,
+  HardDrive,
+  ShieldCheck,
+  User,
+  Globe,
+  UploadCloud,
+  LogIn,
+  CheckCircle,
 } from 'lucide-react';
 
 interface HazardListProps {
@@ -21,6 +29,12 @@ interface HazardListProps {
   onEdit: (hazard: RoadHazard) => void;
   onDelete: (id: string) => void;
   settings: AppSettings;
+  user: UserProfile | null;
+  filterMode: HazardFilterMode;
+  onChangeFilterMode: (mode: HazardFilterMode) => void;
+  onSyncLocalToCloud?: () => void;
+  onOpenAuth?: () => void;
+  localCount?: number;
 }
 
 const HAZARD_LABELS: Record<string, { label: string; icon: string }> = {
@@ -47,6 +61,12 @@ export const HazardList: React.FC<HazardListProps> = ({
   onEdit,
   onDelete,
   settings,
+  user,
+  filterMode,
+  onChangeFilterMode,
+  onSyncLocalToCloud,
+  onOpenAuth,
+  localCount = 0,
 }) => {
   const [search, setSearch] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
@@ -59,13 +79,15 @@ export const HazardList: React.FC<HazardListProps> = ({
     const rCity = (h.city || '').toLowerCase();
     const rNum = (h.roadNumber || '').toLowerCase();
     const rNotes = (h.notes || '').toLowerCase();
+    const rEmail = (h.userEmail || '').toLowerCase();
 
     const matchesSearch =
       !q ||
       rName.includes(q) ||
       rCity.includes(q) ||
       rNum.includes(q) ||
-      rNotes.includes(q);
+      rNotes.includes(q) ||
+      rEmail.includes(q);
 
     const matchesType = selectedType === 'all' || h.hazardType === selectedType;
 
@@ -83,7 +105,100 @@ export const HazardList: React.FC<HazardListProps> = ({
 
   return (
     <div className="flex flex-col h-full w-full p-3 sm:p-5 space-y-4">
-      {/* Search & Filter Header */}
+      {/* Top Banner: Online vs Saját Filter & Sync option */}
+      <div
+        className={`rounded-3xl p-4 border shadow-lg flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between ${
+          isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
+        }`}
+      >
+        {/* Source Mode Filter Tabs */}
+        <div className="flex items-center gap-1.5 p-1 bg-zinc-800/70 rounded-2xl border border-zinc-700/60 overflow-x-auto text-xs font-bold shrink-0">
+          <button
+            type="button"
+            onClick={() => onChangeFilterMode('all_online')}
+            className={`px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all ${
+              filterMode === 'all_online'
+                ? 'bg-emerald-600 text-white shadow-md'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <Globe className="w-4 h-4 text-emerald-300" />
+            <span>Online Felhő Adatok</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (!user && onOpenAuth) {
+                onOpenAuth();
+              } else {
+                onChangeFilterMode('my_hazards');
+              }
+            }}
+            className={`px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all ${
+              filterMode === 'my_hazards'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <User className="w-4 h-4 text-blue-300" />
+            <span>Saját Bejelentéseim</span>
+            {!user && <span className="text-[10px] bg-blue-500/30 px-1.5 py-0.5 rounded text-blue-200">Belépés</span>}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onChangeFilterMode('local_only')}
+            className={`px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all ${
+              filterMode === 'local_only'
+                ? 'bg-amber-600 text-white shadow-md'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <HardDrive className="w-4 h-4 text-amber-300" />
+            <span>Helyi (Offline)</span>
+            {localCount > 0 && <span className="text-[10px] bg-amber-500/30 px-1.5 py-0.5 rounded">({localCount})</span>}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onChangeFilterMode('combined')}
+            className={`px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all ${
+              filterMode === 'combined'
+                ? 'bg-purple-600 text-white shadow-md'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <span>Mind ({hazards.length})</span>
+          </button>
+        </div>
+
+        {/* Sync Local to Cloud Action Button */}
+        {localCount > 0 && onSyncLocalToCloud && (
+          <button
+            type="button"
+            onClick={onSyncLocalToCloud}
+            className="px-4 py-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 shrink-0 cursor-pointer"
+          >
+            <UploadCloud className="w-4 h-4" />
+            <span>{localCount} helyi hiba feltöltése felhőbe</span>
+          </button>
+        )}
+
+        {/* Unauthenticated reminder banner */}
+        {!user && onOpenAuth && (
+          <button
+            type="button"
+            onClick={onOpenAuth}
+            className="px-3.5 py-2 rounded-2xl border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+          >
+            <LogIn className="w-4 h-4" />
+            <span>Belépés email címmel a felhő szinkronhoz</span>
+          </button>
+        )}
+      </div>
+
+      {/* Search & Category Filter */}
       <div
         className={`rounded-3xl p-4 border shadow-lg flex flex-col sm:flex-row gap-3 items-center justify-between ${
           isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
@@ -94,7 +209,7 @@ export const HazardList: React.FC<HazardListProps> = ({
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
           <input
             type="text"
-            placeholder="Keresés út, utca, város szerint..."
+            placeholder="Keresés út, utca, bejelentő szerint..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className={`w-full pl-10 pr-4 py-2.5 rounded-2xl border text-sm focus:outline-none ${
@@ -133,7 +248,7 @@ export const HazardList: React.FC<HazardListProps> = ({
                     ? 'bg-red-600 text-white shadow'
                     : isDark
                     ? 'bg-zinc-800 text-zinc-400 hover:text-white'
-                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
                 }`}
               >
                 <span>{info.icon}</span>
@@ -156,7 +271,13 @@ export const HazardList: React.FC<HazardListProps> = ({
             <AlertTriangle className="w-12 h-12 mx-auto mb-3 opacity-40 text-amber-500" />
             <h3 className="font-bold text-lg mb-1 text-white">Nincs megjeleníthető úthiba</h3>
             <p className="text-sm">
-              {search ? 'Nem található a keresésnek megfelelő rögzített adat.' : 'Még nem rögzítettél úthibát. Kattints a térképre vagy nyomd meg a piros gombot!'}
+              {search
+                ? 'Nem található a keresésnek megfelelő rögzített adat.'
+                : filterMode === 'my_hazards'
+                ? 'Még nem rögzítettél saját úthibát felhőbe. Jelentkezz be és rögzíts egyet a műszerfalon!'
+                : filterMode === 'all_online'
+                ? 'Nincs online közösségi adat. Légy az első, aki feltölt egy úthibát!'
+                : 'Még nem rögzítettél úthibát. Kattints a térképre vagy nyomd meg a piros gombot!'}
             </p>
           </div>
         ) : (
@@ -170,12 +291,16 @@ export const HazardList: React.FC<HazardListProps> = ({
                 : 'Közép';
 
             const isDeleting = confirmDeleteId === hazard.id;
+            const isMine = user && hazard.userId === user.uid;
+            const canManage = isMine || user?.isAdmin;
 
             return (
               <div
                 key={hazard.id}
                 className={`rounded-3xl p-4 sm:p-5 border shadow-md transition-all hover:border-zinc-500 ${
-                  isDark
+                  hazard.resolved
+                    ? 'opacity-70 bg-zinc-900/40 border-zinc-800'
+                    : isDark
                     ? 'bg-zinc-900/90 border-zinc-800 text-white'
                     : 'bg-white border-zinc-200 text-zinc-900'
                 }`}
@@ -197,6 +322,43 @@ export const HazardList: React.FC<HazardListProps> = ({
                         <h4 className="font-bold text-base sm:text-lg">
                           {hazard.roadName || 'Névtelen útszakasz'}
                         </h4>
+
+                        {/* Storage Badge: Online vs Local */}
+                        {hazard.isOnline ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                            <Cloud className="w-3 h-3" />
+                            Online Felhő
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-zinc-700/50 text-zinc-400 border border-zinc-700 flex items-center gap-1">
+                            <HardDrive className="w-3 h-3" />
+                            Helyi
+                          </span>
+                        )}
+
+                        {/* Admin Verified Badge */}
+                        {hazard.verifiedByAdmin && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 shadow-sm">
+                            <ShieldCheck className="w-3 h-3 text-amber-400" />
+                            Admin Hitelesített
+                          </span>
+                        )}
+
+                        {/* Resolved Badge */}
+                        {hazard.resolved && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" />
+                            Kijavítva
+                          </span>
+                        )}
+
+                        {/* Submitter Tag */}
+                        {isMine && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                            Saját bejelentés
+                          </span>
+                        )}
+
                         <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                           {getHazardLabel(hazard.hazardType)}
                         </span>
@@ -205,7 +367,7 @@ export const HazardList: React.FC<HazardListProps> = ({
                         </span>
                       </div>
 
-                      <div className="text-xs text-zinc-400 mt-0.5 flex items-center gap-2">
+                      <div className="text-xs text-zinc-400 mt-0.5 flex flex-wrap items-center gap-2">
                         <MapPin className="w-3.5 h-3.5 text-red-500" />
                         <span>
                           {hazard.city || 'Helyszín'} {hazard.postcode ? `(${hazard.postcode})` : ''}
@@ -213,6 +375,12 @@ export const HazardList: React.FC<HazardListProps> = ({
                         <span>•</span>
                         <Calendar className="w-3.5 h-3.5 text-zinc-400" />
                         <span>{new Date(hazard.timestamp).toLocaleTimeString('hu-HU')}</span>
+                        {hazard.userEmail && (
+                          <>
+                            <span>•</span>
+                            <span className="text-zinc-500">Bejelentő: {hazard.userEmail}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -227,51 +395,56 @@ export const HazardList: React.FC<HazardListProps> = ({
                     >
                       <Volume2 className="w-4 h-4 text-emerald-400" />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => onEdit(hazard)}
-                      className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                      Szerkesztés
-                    </button>
 
-                    {/* Inline Delete Confirmation without iframe-blocked window.confirm */}
-                    {isDeleting ? (
-                      <div className="flex items-center gap-1 bg-red-950/80 border border-red-500/60 p-1 rounded-xl">
-                        <span className="text-[11px] font-bold text-red-300 px-1">Törlöd?</span>
-                        <button
-                          type="button"
-                          onClick={() => handleConfirmDelete(hazard.id)}
-                          className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-0.5"
-                          title="Törlés megerősítése"
-                        >
-                          <Check className="w-3.5 h-3.5 stroke-[3]" />
-                          Igen
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDeleteId(null)}
-                          className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-lg transition-colors"
-                          title="Mégse"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ) : (
+                    {canManage && (
                       <button
                         type="button"
-                        onClick={() => setConfirmDeleteId(hazard.id)}
-                        className="p-2.5 rounded-xl text-red-400 hover:bg-red-500/10 hover:border-red-500/30 border border-transparent transition-colors"
-                        title="Törlés"
+                        onClick={() => onEdit(hazard)}
+                        className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Edit2 className="w-3.5 h-3.5" />
+                        Szerkesztés
                       </button>
+                    )}
+
+                    {/* Inline Delete Confirmation */}
+                    {canManage && (
+                      isDeleting ? (
+                        <div className="flex items-center gap-1 bg-red-950/80 border border-red-500/60 p-1 rounded-xl">
+                          <span className="text-[11px] font-bold text-red-300 px-1">Törlöd?</span>
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmDelete(hazard.id)}
+                            className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-0.5"
+                            title="Törlés megerősítése"
+                          >
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            Igen
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-lg transition-colors"
+                            title="Mégse"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(hazard.id)}
+                          className="p-2.5 rounded-xl text-red-400 hover:bg-red-500/10 hover:border-red-500/30 border border-transparent transition-colors"
+                          title="Törlés"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )
                     )}
                   </div>
                 </div>
 
-                {/* Details Bar: Sávok, Pozíció, Irány */}
+                {/* Details Bar */}
                 <div
                   className={`mt-3 pt-3 border-t grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-medium ${
                     isDark ? 'border-zinc-800 text-zinc-300' : 'border-zinc-100 text-zinc-700'

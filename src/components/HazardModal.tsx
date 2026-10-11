@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RoadHazard, HazardType, LateralPosition, Severity } from '../types';
+import { RoadHazard, HazardType, LateralPosition, Severity, UserProfile } from '../types';
 import { getCardinalDirection, getCardinalDirectionShort } from '../services/geoService';
 import {
   AlertTriangle,
@@ -12,15 +12,21 @@ import {
   CircleAlert,
   Layers,
   ChevronRight,
+  Cloud,
+  HardDrive,
+  UserCheck,
+  LogIn,
 } from 'lucide-react';
 
 interface HazardModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (hazard: RoadHazard) => void;
+  onSave: (hazard: RoadHazard, saveToCloud: boolean) => void;
   onDelete?: (id: string) => void;
   initialHazard: Partial<RoadHazard> | null;
   isEditing?: boolean;
+  user?: UserProfile | null;
+  onOpenAuth?: () => void;
 }
 
 const HAZARD_TYPES: { id: HazardType; label: string; icon: string; desc: string }[] = [
@@ -57,6 +63,8 @@ export const HazardModal: React.FC<HazardModalProps> = ({
   onDelete,
   initialHazard,
   isEditing = false,
+  user,
+  onOpenAuth,
 }) => {
   const [hazardType, setHazardType] = useState<HazardType>('pothole');
   const [laneCount, setLaneCount] = useState<number>(2);
@@ -73,6 +81,7 @@ export const HazardModal: React.FC<HazardModalProps> = ({
   const [lat, setLat] = useState<number>(47.4979);
   const [lon, setLon] = useState<number>(19.0402);
   const [speed, setSpeed] = useState<number>(0);
+  const [saveToCloud, setSaveToCloud] = useState<boolean>(true);
 
   useEffect(() => {
     if (initialHazard) {
@@ -90,8 +99,13 @@ export const HazardModal: React.FC<HazardModalProps> = ({
       setLat(initialHazard.latitude ?? 47.4979);
       setLon(initialHazard.longitude ?? 19.0402);
       setSpeed(Math.round(initialHazard.speed ?? 0));
+      if (initialHazard.isOnline !== undefined) {
+        setSaveToCloud(initialHazard.isOnline);
+      } else {
+        setSaveToCloud(Boolean(user));
+      }
     }
-  }, [initialHazard, isOpen]);
+  }, [initialHazard, isOpen, user]);
 
   if (!isOpen) return null;
 
@@ -126,9 +140,13 @@ export const HazardModal: React.FC<HazardModalProps> = ({
       hazardType,
       severity,
       notes: notes.trim(),
+      isOnline: saveToCloud,
+      isPublic: true,
+      userId: user?.uid,
+      userEmail: user?.email || undefined,
     };
 
-    onSave(finalHazard);
+    onSave(finalHazard, saveToCloud);
     onClose();
   };
 
@@ -187,6 +205,79 @@ export const HazardModal: React.FC<HazardModalProps> = ({
               <Compass className="w-4 h-4 text-amber-400" />
               <span>{heading}°</span>
               <span className="text-xs text-zinc-300">({getCardinalDirectionShort(heading)})</span>
+            </div>
+          </div>
+
+          {/* Storage & Cloud Destination Choice */}
+          <div className="p-4 rounded-2xl bg-zinc-850/80 border border-zinc-700/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                <Cloud className="w-4 h-4 text-blue-400" />
+                Mentés Helye & Tárhely
+              </label>
+              {user ? (
+                <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+                  <UserCheck className="w-3.5 h-3.5" />
+                  Bejelentő: {user.email}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onOpenAuth}
+                  className="text-[11px] text-blue-400 hover:text-blue-300 font-bold underline flex items-center gap-1"
+                >
+                  <LogIn className="w-3 h-3" />
+                  Belépés az email fiókodba
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!user && onOpenAuth) {
+                    onOpenAuth();
+                  } else {
+                    setSaveToCloud(true);
+                  }
+                }}
+                className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-3 ${
+                  saveToCloud
+                    ? 'bg-blue-600/20 border-blue-500 text-white shadow-md shadow-blue-500/10 ring-1 ring-blue-500'
+                    : 'bg-zinc-800/50 border-zinc-700 text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <div className={`p-2 rounded-xl shrink-0 ${saveToCloud ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400'}`}>
+                  <Cloud className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-black text-xs sm:text-sm">Felhő Tárhely (Online Közösség)</div>
+                  <div className="text-[11px] text-zinc-400 mt-0.5">
+                    {user ? 'Minden sofőr számára elérhető valós időben' : 'Jelentkezz be email címmel a megosztáshoz'}
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSaveToCloud(false)}
+                className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-3 ${
+                  !saveToCloud
+                    ? 'bg-amber-600/20 border-amber-500 text-white shadow-md shadow-amber-500/10 ring-1 ring-amber-500'
+                    : 'bg-zinc-800/50 border-zinc-700 text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <div className={`p-2 rounded-xl shrink-0 ${!saveToCloud ? 'bg-amber-600 text-white' : 'bg-zinc-800 text-zinc-400'}`}>
+                  <HardDrive className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-black text-xs sm:text-sm">Helyi Mentés (Offline Eszköz)</div>
+                  <div className="text-[11px] text-zinc-400 mt-0.5">
+                    Kizárólag ezen a készüléken tárolva
+                  </div>
+                </div>
+              </button>
             </div>
           </div>
 

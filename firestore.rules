@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'azqmodel@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidHazardBase(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.timestamp is number &&
+             data.latitude is number && data.latitude >= -90.0 && data.latitude <= 90.0 &&
+             data.longitude is number && data.longitude >= -180.0 && data.longitude <= 180.0 &&
+             data.heading is number &&
+             data.roadName is string && data.roadName.size() <= 128 &&
+             data.hazardType in ['pothole', 'manhole', 'rutting', 'crack', 'subsidence', 'debris', 'speedbump', 'other'] &&
+             data.severity in ['low', 'medium', 'high', 'critical'] &&
+             data.status in ['active', 'verified', 'resolved'] &&
+             data.isPublic is bool &&
+             data.userId is string && data.userId.size() <= 128;
+    }
+
+    // Admins registry
+    match /admins/{adminId} {
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Road Hazards collection
+    match /roadHazards/{hazardId} {
+      allow get: if resource.data.isPublic == true ||
+                    (isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin()));
+
+      allow list: if resource.data.isPublic == true ||
+                     (isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin()));
+
+      allow create: if isSignedIn() &&
+                       isValidId(hazardId) &&
+                       isValidHazardBase(incoming()) &&
+                       incoming().userId == request.auth.uid &&
+                       (isAdmin() || incoming().verifiedByAdmin == false);
+
+      allow update: if isSignedIn() &&
+                       isValidId(hazardId) &&
+                       isValidHazardBase(incoming()) &&
+                       (
+                         isAdmin() ||
+                         (
+                           existing().userId == request.auth.uid &&
+                           incoming().userId == request.auth.uid &&
+                           incoming().verifiedByAdmin == existing().verifiedByAdmin
+                         )
+                       );
+
+      allow delete: if isSignedIn() &&
+                       (isAdmin() || existing().userId == request.auth.uid);
+    }
+  }
+}

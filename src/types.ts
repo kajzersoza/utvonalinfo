@@ -35,6 +35,25 @@ export interface RoadHazard {
   severity: Severity;
   notes?: string;
   resolved?: boolean;
+  // Online / Firebase fields
+  isOnline?: boolean;
+  isPublic?: boolean;
+  userId?: string;
+  userEmail?: string;
+  status?: 'active' | 'verified' | 'resolved';
+  verifiedByAdmin?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type HazardFilterMode = 'all_online' | 'my_hazards' | 'local_only' | 'combined';
+
+export interface UserProfile {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  isAdmin: boolean;
+  photoURL?: string | null;
 }
 
 export type OSMFeatureType = 'crossing' | 'railway' | 'traffic_signals' | 'traffic_sign';
