@@ -9,6 +9,9 @@ import {
   CheckCircle2,
   KeyRound,
   ArrowRight,
+  Copy,
+  ExternalLink,
+  HelpCircle,
 } from 'lucide-react';
 import {
   loginWithEmail,
@@ -16,6 +19,7 @@ import {
   loginWithGoogle,
   resetPassword,
 } from '../services/firebase';
+import firebaseConfig from '../../firebase-applet-config.json';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -37,13 +41,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [copiedHost, setCopiedHost] = useState(false);
+  const [showDomainGuide, setShowDomainGuide] = useState(false);
 
   if (!isOpen) return null;
+
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
+  const firebaseSettingsUrl = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/settings`;
+
+  const copyHostToClipboard = () => {
+    if (currentHost && navigator.clipboard) {
+      navigator.clipboard.writeText(currentHost);
+      setCopiedHost(true);
+      setTimeout(() => setCopiedHost(false), 2500);
+    }
+  };
 
   const handleAuthError = (err: unknown) => {
     const raw = err instanceof Error ? err.message : String(err);
     if (raw.includes('unauthorized-domain')) {
-      return 'A Google bejelentkezéshez ezt a webcímet engedélyezni kell a Firebase Konzolban. Kérlek, használd a fenti Email és Jelszó mezőket a regisztrációhoz vagy belépéshez – az azonnal működik!';
+      setShowDomainGuide(true);
+      return 'A Google bejelentkezéshez ezt a webcímet (domaint) engedélyezni kell a Firebase Konzolban. Lásd a lenti lépéseket, vagy használd a közvetlen Email + Jelszó regisztrációt!';
     }
     if (raw.includes('auth/invalid-email')) {
       return 'Érvénytelen formátumú email cím!';
@@ -391,6 +409,59 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <p className="text-[10px] text-zinc-500 text-center mt-2 leading-tight">
               Tipp: Bármilyen domainről az <span className="text-zinc-300 font-semibold">Email és Jelszó</span> regisztráció/belépés közvetlenül, azonnal működik!
             </p>
+
+            {/* Toggle domain guide */}
+            <div className="text-center mt-1">
+              <button
+                type="button"
+                onClick={() => setShowDomainGuide(!showDomainGuide)}
+                className="text-[11px] text-blue-400 hover:text-blue-300 underline inline-flex items-center gap-1 font-semibold cursor-pointer"
+              >
+                <HelpCircle className="w-3 h-3" />
+                {showDomainGuide ? 'Útmutató elrejtése' : 'Hogyan engedélyezhetem a Google belépést a Firebase-ben?'}
+              </button>
+            </div>
+
+            {/* Step-by-step domain authorization box */}
+            {showDomainGuide && (
+              <div className="mt-3 p-3.5 rounded-2xl bg-zinc-900 border border-zinc-700/80 text-xs space-y-2.5 animate-in fade-in duration-200">
+                <div className="font-bold text-amber-400 flex items-center justify-between">
+                  <span>Google Belépés Engedélyezése:</span>
+                  <a
+                    href={firebaseSettingsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded-lg flex items-center gap-1 font-bold no-underline"
+                  >
+                    <span>Firebase Megnyitása</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+
+                <div className="space-y-1 text-zinc-300 text-[11px] leading-relaxed">
+                  <p>1. Nyisd meg a Firebase Konzolban az <strong>Authentication → Settings</strong> menüt.</p>
+                  <p>2. Görgess le az <strong>Authorized domains (Engedélyezett domainek)</strong> részhez, és kattints az <em>Add domain</em> gombra.</p>
+                  <p>3. Másold ki és illeszd be ezt a címet:</p>
+                </div>
+
+                {/* Copy domain box */}
+                <div className="flex items-center gap-2 bg-black/50 p-2 rounded-xl border border-zinc-800 font-mono text-[11px]">
+                  <span className="flex-1 truncate text-zinc-200">{currentHost || 'Aktuális domain'}</span>
+                  <button
+                    type="button"
+                    onClick={copyHostToClipboard}
+                    className="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-sans text-[10px] font-bold flex items-center gap-1 shrink-0 cursor-pointer"
+                  >
+                    <Copy className="w-3 h-3" />
+                    {copiedHost ? <span className="text-emerald-400">Másolva!</span> : <span>Másolás</span>}
+                  </button>
+                </div>
+
+                <p className="text-[10px] text-zinc-400 italic">
+                  Megjegyzés: A mentés után a Google bejelentkezés azonnal működni fog erről a címről is.
+                </p>
+              </div>
+            )}
           </div>
         </form>
       </div>

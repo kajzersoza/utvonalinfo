@@ -231,3 +231,139 @@ export async function fetchOSMRoadInfo(lat: number, lon: number): Promise<RoadIn
     };
   }
 }
+
+// -------------------------------------------------------------
+// Real Online OSM Features Fetching via Overpass API
+// (Crossings, Railways, Traffic Signals, Traffic Signs)
+// -------------------------------------------------------------
+let lastOverpassQueryLat = 0;
+let lastOverpassQueryLon = 0;
+let lastOverpassQueryTime = 0;
+const cachedOnlineFeatures: OSMFeature[] = [...SAMPLE_OSM_FEATURES];
+
+export async function fetchNearbyOSMFeatures(
+  lat: number,
+  lon: number,
+  force: boolean = false
+): Promise<OSMFeature[]> {
+  const now = Date.now();
+  const dist = calculateDistanceMeters(lastOverpassQueryLat, lastOverpassQueryLon, lat, lon);
+
+  // If queried recently and user moved less than 160 meters, return cached features
+  if (!force && dist < 160 && now - lastOverpassQueryTime < 14000 && cachedOnlineFeatures.length > 0) {
+    return cachedOnlineFeatures;
+  }
+
+  // Throttle to respect public OSM Overpass servers
+  if (!force && now - lastOverpassQueryTime < 7000) {
+    return cachedOnlineFeatures;
+  }
+
+  lastOverpassQueryLat = lat;
+  lastOverpassQueryLon = lon;
+  lastOverpassQueryTime = now;
+
+  const query = `[out:json][timeout:6];(node["highway"="crossing"](around:500,${lat.toFixed(5)},${lon.toFixed(5)});way["highway"="crossing"](around:500,${lat.toFixed(5)},${lon.toFixed(5)});node["railway"~"^(level_crossing|crossing)$"](around:550,${lat.toFixed(5)},${lon.toFixed(5)});node["highway"="traffic_signals"](around:500,${lat.toFixed(5)},${lon.toFixed(5)});node["traffic_sign"](around:500,${lat.toFixed(5)},${lon.toFixed(5)});node["highway"~"^(speed_camera|stop|give_way)$"](around:500,${lat.toFixed(5)},${lon.toFixed(5)}););out center 45;`;
+
+  const endpoints = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5500);
+
+      const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `data=${encodeURIComponent(query)}`,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!resp.ok) continue;
+
+      const data = await resp.json();
+      if (!data.elements || !Array.isArray(data.elements)) continue;
+
+      const results: OSMFeature[] = [];
+      for (const el of data.elements) {
+        const itemLat = el.lat ?? el.center?.lat;
+        const itemLon = el.lon ?? el.center?.lon;
+        if (!itemLat || !itemLon) continue;
+
+        const tags = el.tags || {};
+        let type: OSMFeature['type'] | null = null;
+        let name = '';
+        let desc = '';
+        let speedLimit: number | undefined;
+
+        if (tags.highway === 'crossing') {
+          type = 'crossing';
+          name = tags.crossing === 'zebra' ? 'Zebra gyalogátkelőhely' : (tags.name || 'Gyalogátkelőhely');
+          desc = tags.flashing_lights === 'yes' ? 'Sárga villogó fénnyel jelzett átkelő' : 'Kijelölt gyalogos átkelőhely';
+        } else if (tags.railway === 'level_crossing' || tags.railway === 'crossing') {
+          type = 'railway';
+          name = tags.name || 'Vasúti átjáró';
+          desc = tags['crossing:barrier'] ? 'Sorompóval védett vasúti átjáró' : 'Vasúti fénysorompós átjáró';
+        } else if (tags.highway === 'traffic_signals') {
+          type = 'traffic_signals';
+          name = tags.name || 'Forgalmi jelzőlámpa';
+          desc = 'Közúti csomóponti jelzőlámpa';
+        } else if (tags.traffic_sign || tags.highway === 'speed_camera' || tags.highway === 'stop' || tags.highway === 'give_way') {
+          type = 'traffic_sign';
+          if (tags.highway === 'speed_camera') {
+            name = 'Sebességmérő kamera (Traffipax)';
+            desc = 'Automata sebességellenőrzés';
+          } else if (tags.highway === 'stop') {
+            name = 'ÁLLJ! Elsőbbségadás kötelező (STOP tábla)';
+            desc = 'Közlekedési Stop tábla';
+          } else if (tags.highway === 'give_way') {
+            name = 'Elsőbbségadás kötelező tábla';
+            desc = 'Mackósajt elsőbbségadás tábla';
+          } else {
+            name = `Közlekedési tábla (${tags.traffic_sign})`;
+            desc = 'Közúti jelzőtábla';
+          }
+
+          if (tags.maxspeed) {
+            speedLimit = parseInt(tags.maxspeed, 10);
+            if (!isNaN(speedLimit)) name = `Sebességkorlátozás: ${speedLimit} km/h`;
+          }
+        }
+
+        if (type) {
+          results.push({
+            id: `osm-${el.type || 'node'}-${el.id}`,
+            type,
+            name,
+            latitude: itemLat,
+            longitude: itemLon,
+            description: desc,
+            speedLimit,
+          });
+        }
+      }
+
+      if (results.length > 0) {
+        // Merge into cached features, preserving already loaded
+        const map = new Map(cachedOnlineFeatures.map((f) => [f.id, f]));
+        for (const item of results) {
+          map.set(item.id, item);
+        }
+        cachedOnlineFeatures.length = 0;
+        cachedOnlineFeatures.push(...Array.from(map.values()));
+        return cachedOnlineFeatures;
+      }
+    } catch {
+      // Ignore network timeout, try next or return existing
+    }
+  }
+
+  return cachedOnlineFeatures;
+}
+

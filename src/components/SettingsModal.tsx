@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppSettings, RoadHazard } from '../types';
 import { speechService } from '../services/speechService';
+import { audioAlertService } from '../services/audioAlertService';
 import { exportHazardsJSON, importHazardsJSON } from '../services/storageService';
 import {
   X,
@@ -11,9 +12,11 @@ import {
   Download,
   Upload,
   Eye,
-  Check,
   Play,
-  RotateCcw,
+  Bell,
+  MapPin,
+  RefreshCw,
+  Compass,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -23,6 +26,9 @@ interface SettingsModalProps {
   onUpdateSettings: (newSettings: AppSettings) => void;
   hazards: RoadHazard[];
   onImportHazards: (hazards: RoadHazard[]) => void;
+  onRefreshOnlineOsm?: () => void;
+  isRefreshingOsm?: boolean;
+  osmFeatureCount?: number;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -32,8 +38,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onUpdateSettings,
   hazards,
   onImportHazards,
+  onRefreshOnlineOsm,
+  isRefreshingOsm = false,
+  osmFeatureCount = 0,
 }) => {
-  const [activeTab, setActiveTab] = useState<'display' | 'voice' | 'data'>('voice');
+  const [activeTab, setActiveTab] = useState<'sound' | 'osm' | 'voice' | 'display' | 'data'>('sound');
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [importStatus, setImportStatus] = useState<string | null>(null);
 
@@ -94,7 +103,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-xl bg-zinc-900 border border-zinc-700 rounded-3xl shadow-2xl text-white overflow-hidden my-auto max-h-[92vh] flex flex-col">
+      <div className="relative w-full max-w-2xl bg-zinc-900 border border-zinc-700 rounded-3xl shadow-2xl text-white overflow-hidden my-auto max-h-[92vh] flex flex-col">
         {/* Modal Header */}
         <div className="px-6 py-4 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
@@ -103,57 +112,832 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-white rounded-full transition-colors"
+            className="p-1.5 text-zinc-400 hover:text-white rounded-full transition-colors cursor-pointer"
           >
             <X className="w-6 h-6" />
           </button>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-zinc-800 bg-zinc-950/60 p-2 gap-1 shrink-0">
+        <div className="flex border-b border-zinc-800 bg-zinc-950/60 p-2 gap-1 overflow-x-auto shrink-0 scrollbar-none">
           <button
             type="button"
-            onClick={() => setActiveTab('voice')}
-            className={`flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors ${
-              activeTab === 'voice'
-                ? 'bg-blue-600 text-white'
+            onClick={() => setActiveTab('sound')}
+            className={`px-3 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors cursor-pointer ${
+              activeTab === 'sound'
+                ? 'bg-amber-600 text-white shadow-md'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
             }`}
           >
-            <Volume2 className="w-4 h-4" />
-            Hangos Beszéd (TTS)
+            <Bell className="w-4 h-4 text-amber-300" />
+            Hangjelzések (1, 2, 3...)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('osm')}
+            className={`px-3 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors cursor-pointer ${
+              activeTab === 'osm'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+          >
+            <MapPin className="w-4 h-4 text-cyan-300" />
+            OSM Elemek & Bemondás
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('voice')}
+            className={`px-3 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors cursor-pointer ${
+              activeTab === 'voice'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+          >
+            <Volume2 className="w-4 h-4 text-emerald-300" />
+            Beszédhang (TTS)
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('display')}
-            className={`flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors ${
+            className={`px-3 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors cursor-pointer ${
               activeTab === 'display'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-blue-600 text-white shadow-md'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
             }`}
           >
             <Eye className="w-4 h-4" />
-            Kijelző & Megjelenítés
+            Kijelző
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('data')}
-            className={`flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors ${
+            className={`px-3 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors cursor-pointer ${
               activeTab === 'data'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-blue-600 text-white shadow-md'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
             }`}
           >
             <Download className="w-4 h-4" />
-            Adatmentés
+            Mentés
           </button>
         </div>
 
         {/* Tab Content */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 text-zinc-200">
-          {/* TAB 1: VOICE CONFIGURATION */}
+          {/* TAB 1: ACOUSTIC SOUND ALERTS (1, 2, 3, 4 CHIMES BY SEVERITY & TYPE) */}
+          {activeTab === 'sound' && (
+            <div className="space-y-5">
+              {/* Sound Alerts Main Switch */}
+              <div className="bg-zinc-800/80 p-4 rounded-2xl flex items-center justify-between border border-zinc-700">
+                <div>
+                  <div className="font-bold text-base text-white flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-amber-400" />
+                    <span>Akusztikus Rövid Hangjelzések (Pittyegés)</span>
+                  </div>
+                  <div className="text-xs text-zinc-400 mt-0.5">
+                    Rövid, jól hallható jelzőhangok a veszélyesség fokára és hibatípusokra
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.soundAlerts.enabled}
+                  onChange={(e) =>
+                    onUpdateSettings({
+                      ...settings,
+                      soundAlerts: { ...settings.soundAlerts, enabled: e.target.checked },
+                    })
+                  }
+                  className="w-6 h-6 accent-amber-500 rounded cursor-pointer"
+                />
+              </div>
+
+              {/* Alert Mode Toggle: Both vs Sound Only vs Voice Only */}
+              <div className="bg-zinc-800/60 p-4 rounded-2xl border border-zinc-700 space-y-2">
+                <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider block">
+                  Jelzési Mód Vezetés Közben:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateSettings({
+                        ...settings,
+                        soundAlerts: { ...settings.soundAlerts, alertMode: 'both' },
+                      })
+                    }
+                    className={`p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all cursor-pointer ${
+                      (settings.soundAlerts.alertMode ?? 'both') === 'both'
+                        ? 'bg-amber-600 text-white border-amber-500 shadow-md ring-2 ring-amber-500/30'
+                        : 'bg-zinc-900/70 text-zinc-300 border-zinc-750 hover:bg-zinc-800'
+                    }`}
+                  >
+                    <span>🔊</span>
+                    <span>Hang + Beszéd (Együtt)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateSettings({
+                        ...settings,
+                        soundAlerts: { ...settings.soundAlerts, alertMode: 'sound_only' },
+                      })
+                    }
+                    className={`p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all cursor-pointer ${
+                      settings.soundAlerts.alertMode === 'sound_only'
+                        ? 'bg-amber-600 text-white border-amber-500 shadow-md ring-2 ring-amber-500/30'
+                        : 'bg-zinc-900/70 text-zinc-300 border-zinc-750 hover:bg-zinc-800'
+                    }`}
+                  >
+                    <span>🔔</span>
+                    <span>Csak rövid hangjelzés</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateSettings({
+                        ...settings,
+                        soundAlerts: { ...settings.soundAlerts, alertMode: 'voice_only' },
+                      })
+                    }
+                    className={`p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all cursor-pointer ${
+                      settings.soundAlerts.alertMode === 'voice_only'
+                        ? 'bg-amber-600 text-white border-amber-500 shadow-md ring-2 ring-amber-500/30'
+                        : 'bg-zinc-900/70 text-zinc-300 border-zinc-750 hover:bg-zinc-800'
+                    }`}
+                  >
+                    <span>🗣️</span>
+                    <span>Csak felolvasás (TTS)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Volume Slider */}
+              <div className="bg-zinc-800/50 p-4 rounded-2xl border border-zinc-700/70 space-y-2">
+                <div className="flex justify-between text-xs font-semibold text-zinc-300">
+                  <span>Hangjelzések Hagyereje</span>
+                  <span className="font-mono text-amber-400 font-bold">
+                    {Math.round((settings.soundAlerts.volume ?? 0.8) * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0.1"
+                  max="1.0"
+                  step="0.05"
+                  value={settings.soundAlerts.volume ?? 0.8}
+                  onChange={(e) =>
+                    onUpdateSettings({
+                      ...settings,
+                      soundAlerts: {
+                        ...settings.soundAlerts,
+                        volume: parseFloat(e.target.value),
+                      },
+                    })
+                  }
+                  className="w-full accent-amber-500 cursor-pointer"
+                />
+              </div>
+
+              {/* Sound Style Picker */}
+              <div className="bg-zinc-800/40 p-3.5 rounded-2xl border border-zinc-700/60 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold text-zinc-300">Hangszín és Stílus</div>
+                  <div className="text-[11px] text-zinc-400">Akusztikus szignál karaktere</div>
+                </div>
+                <div className="flex gap-1.5">
+                  {(['digital', 'chime', 'beep', 'radar'] as const).map((style) => (
+                    <button
+                      key={style}
+                      type="button"
+                      onClick={() =>
+                        onUpdateSettings({
+                          ...settings,
+                          soundAlerts: { ...settings.soundAlerts, soundStyle: style },
+                        })
+                      }
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer ${
+                        (settings.soundAlerts.soundStyle || 'digital') === style
+                          ? 'bg-amber-600 text-white'
+                          : 'bg-zinc-900 text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      {style === 'digital' ? 'Digitális' : style === 'chime' ? 'Harang' : style === 'beep' ? 'Csipogás' : 'Radar'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Severity Chimes (1, 2, 3, 4 jelzés) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
+                      Veszélyességi Fokozatonkénti Hangjelzések (1, 2, 3, 4):
+                    </label>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      1, 2, 3 és 4 pittyenés a hiba súlyosságától és a veszély fokától függően
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={settings.soundAlerts.playSeverityChimes}
+                    onChange={(e) =>
+                      onUpdateSettings({
+                        ...settings,
+                        soundAlerts: {
+                          ...settings.soundAlerts,
+                          playSeverityChimes: e.target.checked,
+                        },
+                      })
+                    }
+                    className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                  />
+                </div>
+
+                {/* Level 1: Low */}
+                <div className="p-3.5 bg-zinc-800/40 border border-emerald-500/30 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 font-black text-sm flex items-center justify-center border border-emerald-500/40">
+                      1
+                    </span>
+                    <div>
+                      <div className="font-bold text-xs sm:text-sm text-emerald-300">
+                        1. fokozat (Enyhe) — 1 lágy jelzés
+                      </div>
+                      <div className="text-[11px] text-zinc-400">
+                        Egyszeri lágy harmonikus pittyenés kisebb repedéseknél vagy egyenetlenségnél
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playSeverityChime('low', settings.soundAlerts)}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition-colors cursor-pointer shrink-0"
+                  >
+                    <Play className="w-3 h-3" />
+                    Próba (1)
+                  </button>
+                </div>
+
+                {/* Level 2: Medium */}
+                <div className="p-3.5 bg-zinc-800/40 border border-amber-500/30 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 font-black text-sm flex items-center justify-center border border-amber-500/40">
+                      2
+                    </span>
+                    <div>
+                      <div className="font-bold text-xs sm:text-sm text-amber-300">
+                        2. fokozat (Közepes) — 2 határozott jelzés
+                      </div>
+                      <div className="text-[11px] text-zinc-400">
+                        Kettős figyelmeztető pittyegés közepes mélységű úthibánál
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playSeverityChime('medium', settings.soundAlerts)}
+                    className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition-colors cursor-pointer shrink-0"
+                  >
+                    <Play className="w-3 h-3" />
+                    Próba (2)
+                  </button>
+                </div>
+
+                {/* Level 3: High */}
+                <div className="p-3.5 bg-zinc-800/40 border border-orange-500/30 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-xl bg-orange-500/20 text-orange-400 font-black text-sm flex items-center justify-center border border-orange-500/40">
+                      3
+                    </span>
+                    <div>
+                      <div className="font-bold text-xs sm:text-sm text-orange-300">
+                        3. fokozat (Súlyos) — 3 figyelmeztető sípolás
+                      </div>
+                      <div className="text-[11px] text-zinc-400">
+                        Hármas gyors sürgősségi csipogás mély kátyúnál vagy nyomvályúnál
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playSeverityChime('high', settings.soundAlerts)}
+                    className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition-colors cursor-pointer shrink-0"
+                  >
+                    <Play className="w-3 h-3" />
+                    Próba (3)
+                  </button>
+                </div>
+
+                {/* Level 4: Critical */}
+                <div className="p-3.5 bg-zinc-800/40 border border-rose-500/40 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 font-black text-sm flex items-center justify-center border border-rose-500/40">
+                      4
+                    </span>
+                    <div>
+                      <div className="font-bold text-xs sm:text-sm text-rose-300">
+                        4. fokozat (Kritikus) — 4 gyors vészjelzés
+                      </div>
+                      <div className="text-[11px] text-zinc-400">
+                        Négyes azonnali szirénázó figyelmeztetés keréktörési vagy borulási veszélykor
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playSeverityChime('critical', settings.soundAlerts)}
+                    className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition-colors cursor-pointer shrink-0"
+                  >
+                    <Play className="w-3 h-3" />
+                    Próba (4)
+                  </button>
+                </div>
+              </div>
+
+              {/* Distinctive Type Chimes for Road Hazards */}
+              <div className="space-y-3 pt-2 border-t border-zinc-800">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider block">
+                      Egyedi Hangjelzések Úthiba Típusok Szerint:
+                    </label>
+                    <p className="text-[11px] text-zinc-400">
+                      Különböző hangszínek és frekvenciák az egyes hibák felismeréséhez
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={settings.soundAlerts.playTypeChimes}
+                    onChange={(e) =>
+                      onUpdateSettings({
+                        ...settings,
+                        soundAlerts: {
+                          ...settings.soundAlerts,
+                          playTypeChimes: e.target.checked,
+                        },
+                      })
+                    }
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playTypeChime('pothole', settings.soundAlerts)}
+                    className="p-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700 hover:border-amber-500/50 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl">🕳️</span>
+                      <Play className="w-3.5 h-3.5 text-zinc-400 group-hover:text-amber-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white mt-1">Kátyú</div>
+                    <div className="text-[10px] text-zinc-400">Mély döccenés</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playTypeChime('manhole', settings.soundAlerts)}
+                    className="p-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700 hover:border-amber-500/50 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl">🔘</span>
+                      <Play className="w-3.5 h-3.5 text-zinc-400 group-hover:text-amber-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white mt-1">Csatornafedél</div>
+                    <div className="text-[10px] text-zinc-400">Fémes csengettyű</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playTypeChime('rutting', settings.soundAlerts)}
+                    className="p-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700 hover:border-amber-500/50 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl">〰️</span>
+                      <Play className="w-3.5 h-3.5 text-zinc-400 group-hover:text-amber-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white mt-1">Nyomvályú</div>
+                    <div className="text-[10px] text-zinc-400">Hullámzó hang</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playTypeChime('crack', settings.soundAlerts)}
+                    className="p-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700 hover:border-amber-500/50 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl">⚡</span>
+                      <Play className="w-3.5 h-3.5 text-zinc-400 group-hover:text-amber-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white mt-1">Repedés</div>
+                    <div className="text-[10px] text-zinc-400">Éles kattanás</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playTypeChime('subsidence', settings.soundAlerts)}
+                    className="p-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700 hover:border-amber-500/50 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl">📉</span>
+                      <Play className="w-3.5 h-3.5 text-zinc-400 group-hover:text-amber-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white mt-1">Süllyedés</div>
+                    <div className="text-[10px] text-zinc-400">Csúszó mély hang</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playTypeChime('speedbump', settings.soundAlerts)}
+                    className="p-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700 hover:border-amber-500/50 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl">🚧</span>
+                      <Play className="w-3.5 h-3.5 text-zinc-400 group-hover:text-amber-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white mt-1">Fekvőrendőr</div>
+                    <div className="text-[10px] text-zinc-400">Lassítási görbe</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playTypeChime('debris', settings.soundAlerts)}
+                    className="p-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700 hover:border-amber-500/50 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl">⚠️</span>
+                      <Play className="w-3.5 h-3.5 text-zinc-400 group-hover:text-amber-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white mt-1">Akadály / Kő</div>
+                    <div className="text-[10px] text-zinc-400">Kettős vészjelzés</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playTypeChime('other', settings.soundAlerts)}
+                    className="p-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700 hover:border-amber-500/50 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl">❓</span>
+                      <Play className="w-3.5 h-3.5 text-zinc-400 group-hover:text-amber-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white mt-1">Egyéb hiba</div>
+                    <div className="text-[10px] text-zinc-400">Figyelmeztetés</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Distinctive Type Chimes for OSM Features */}
+              <div className="space-y-3 pt-2 border-t border-zinc-800">
+                <label className="text-xs font-bold text-cyan-300 uppercase tracking-wider block">
+                  Közlekedési & OSM Elemek Hangjelzései:
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playTypeChime('railway', settings.soundAlerts)}
+                    className="p-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700 hover:border-cyan-500/50 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl">🚂</span>
+                      <Play className="w-3.5 h-3.5 text-cyan-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white mt-1">Vasúti átjáró</div>
+                    <div className="text-[10px] text-zinc-400">Fénysorompó csengő</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playTypeChime('crossing', settings.soundAlerts)}
+                    className="p-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700 hover:border-cyan-500/50 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl">🚶</span>
+                      <Play className="w-3.5 h-3.5 text-cyan-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white mt-1">Gyalogátkelő</div>
+                    <div className="text-[10px] text-zinc-400">Lágy kéthangos</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playTypeChime('traffic_signals', settings.soundAlerts)}
+                    className="p-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700 hover:border-cyan-500/50 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl">🚦</span>
+                      <Play className="w-3.5 h-3.5 text-cyan-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white mt-1">Jelzőlámpa</div>
+                    <div className="text-[10px] text-zinc-400">Figyelmeztető szignál</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => audioAlertService.playTypeChime('traffic_sign', settings.soundAlerts)}
+                    className="p-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700 hover:border-cyan-500/50 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl">🛑</span>
+                      <Play className="w-3.5 h-3.5 text-cyan-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white mt-1">Közúti tábla</div>
+                    <div className="text-[10px] text-zinc-400">Tiszta pittyenés</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: ONLINE OSM FEATURES & ANNOUNCE TOGGLES */}
+          {activeTab === 'osm' && (
+            <div className="space-y-5">
+              {/* Overpass Live Sync Card */}
+              <div className="bg-gradient-to-r from-blue-900/40 via-cyan-900/30 to-zinc-900 p-4 rounded-2xl border border-blue-500/40 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-cyan-400" />
+                    <span className="font-black text-sm text-white">Valós Online OpenStreetMap (OSM) Adatbázis</span>
+                    <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[11px] font-bold">
+                      {osmFeatureCount} elem betöltve
+                    </span>
+                  </div>
+                  {onRefreshOnlineOsm && (
+                    <button
+                      type="button"
+                      disabled={isRefreshingOsm}
+                      onClick={onRefreshOnlineOsm}
+                      className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingOsm ? 'animate-spin' : ''}`} />
+                      <span>{isRefreshingOsm ? 'Letöltés...' : 'Online Lekérés Most'}</span>
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  Az alkalmazás vezetés közben a valós OpenStreetMap (Overpass API) szerverről tölti le az online adatokat (akárcsak az utcaneveket): vasúti átjárókat, gyalogátkelőket, jelzőlámpákat és táblákat.
+                  Az alábbiakban egyenként bejelölheted, hogy mely elemeket <strong className="text-blue-300">mutassa a képernyőn/térképen</strong>, és melyeket <strong className="text-emerald-300">mondja be hanggal közeledéskor</strong>!
+                </p>
+              </div>
+
+              {/* Individual Feature Settings: SHOW vs ANNOUNCE */}
+              <div className="space-y-3">
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">
+                  Elemek egyenkénti beállítása (Megjelenítés & Hangos bemondás):
+                </label>
+
+                {/* 1. Crossings (Zebra) */}
+                <div className="p-4 bg-zinc-800/60 border border-zinc-700/80 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-2xl">🚶</span>
+                      <div>
+                        <div className="font-bold text-sm text-white">Gyalogátkelőhelyek (Zebra)</div>
+                        <div className="text-[11px] text-zinc-400">Kijelölt gyalogos átkelők és sárga villogós átkelőhelyek</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => audioAlertService.playTypeChime('crossing', settings.soundAlerts)}
+                      className="px-2.5 py-1 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-cyan-300 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Hangminta lejátszása"
+                    >
+                      <Play className="w-3 h-3" />
+                      <span>Hang</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-zinc-700/60">
+                    <label className="flex items-center justify-between p-2.5 bg-zinc-900/60 rounded-xl cursor-pointer hover:bg-zinc-900 border border-zinc-800">
+                      <span className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 text-blue-400" />
+                        Mutassa a térképen / HUD-on
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={settings.osmFeatures.showCrossings}
+                        onChange={(e) =>
+                          onUpdateSettings({
+                            ...settings,
+                            osmFeatures: { ...settings.osmFeatures, showCrossings: e.target.checked },
+                          })
+                        }
+                        className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between p-2.5 bg-zinc-900/60 rounded-xl cursor-pointer hover:bg-zinc-900 border border-zinc-800">
+                      <span className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                        <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                        Mondja be hangosan közeledéskor
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={settings.osmFeatures.announceCrossings}
+                        onChange={(e) =>
+                          onUpdateSettings({
+                            ...settings,
+                            osmFeatures: { ...settings.osmFeatures, announceCrossings: e.target.checked },
+                          })
+                        }
+                        className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* 2. Railways (Level Crossings) */}
+                <div className="p-4 bg-zinc-800/60 border border-zinc-700/80 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-2xl">🚂</span>
+                      <div>
+                        <div className="font-bold text-sm text-white">Vasúti Átjárók (Fénysorompók, Sorompók)</div>
+                        <div className="text-[11px] text-zinc-400">Szintbeli vasúti kereszteződések és átjárók</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => audioAlertService.playTypeChime('railway', settings.soundAlerts)}
+                      className="px-2.5 py-1 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-cyan-300 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Hangminta lejátszása"
+                    >
+                      <Play className="w-3 h-3" />
+                      <span>Hang</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-zinc-700/60">
+                    <label className="flex items-center justify-between p-2.5 bg-zinc-900/60 rounded-xl cursor-pointer hover:bg-zinc-900 border border-zinc-800">
+                      <span className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 text-blue-400" />
+                        Mutassa a térképen / HUD-on
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={settings.osmFeatures.showRailways}
+                        onChange={(e) =>
+                          onUpdateSettings({
+                            ...settings,
+                            osmFeatures: { ...settings.osmFeatures, showRailways: e.target.checked },
+                          })
+                        }
+                        className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between p-2.5 bg-zinc-900/60 rounded-xl cursor-pointer hover:bg-zinc-900 border border-zinc-800">
+                      <span className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                        <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                        Mondja be hangosan közeledéskor
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={settings.osmFeatures.announceRailways}
+                        onChange={(e) =>
+                          onUpdateSettings({
+                            ...settings,
+                            osmFeatures: { ...settings.osmFeatures, announceRailways: e.target.checked },
+                          })
+                        }
+                        className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* 3. Traffic Signals */}
+                <div className="p-4 bg-zinc-800/60 border border-zinc-700/80 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-2xl">🚦</span>
+                      <div>
+                        <div className="font-bold text-sm text-white">Forgalmi Jelzőlámpák</div>
+                        <div className="text-[11px] text-zinc-400">Közúti forgalomirányító jelzőlámpák és csomópontok</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => audioAlertService.playTypeChime('traffic_signals', settings.soundAlerts)}
+                      className="px-2.5 py-1 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-cyan-300 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Hangminta lejátszása"
+                    >
+                      <Play className="w-3 h-3" />
+                      <span>Hang</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-zinc-700/60">
+                    <label className="flex items-center justify-between p-2.5 bg-zinc-900/60 rounded-xl cursor-pointer hover:bg-zinc-900 border border-zinc-800">
+                      <span className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 text-blue-400" />
+                        Mutassa a térképen / HUD-on
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={settings.osmFeatures.showTrafficSignals}
+                        onChange={(e) =>
+                          onUpdateSettings({
+                            ...settings,
+                            osmFeatures: { ...settings.osmFeatures, showTrafficSignals: e.target.checked },
+                          })
+                        }
+                        className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between p-2.5 bg-zinc-900/60 rounded-xl cursor-pointer hover:bg-zinc-900 border border-zinc-800">
+                      <span className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                        <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                        Mondja be hangosan közeledéskor
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={settings.osmFeatures.announceTrafficSignals}
+                        onChange={(e) =>
+                          onUpdateSettings({
+                            ...settings,
+                            osmFeatures: { ...settings.osmFeatures, announceTrafficSignals: e.target.checked },
+                          })
+                        }
+                        className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* 4. Traffic Signs */}
+                <div className="p-4 bg-zinc-800/60 border border-zinc-700/80 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-2xl">🛑</span>
+                      <div>
+                        <div className="font-bold text-sm text-white">Közlekedési Táblák (Sebességkorlátozás, Elsőbbség)</div>
+                        <div className="text-[11px] text-zinc-400">Megengedett sebesség és veszélyt jelző táblák</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => audioAlertService.playTypeChime('traffic_sign', settings.soundAlerts)}
+                      className="px-2.5 py-1 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-cyan-300 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Hangminta lejátszása"
+                    >
+                      <Play className="w-3 h-3" />
+                      <span>Hang</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-zinc-700/60">
+                    <label className="flex items-center justify-between p-2.5 bg-zinc-900/60 rounded-xl cursor-pointer hover:bg-zinc-900 border border-zinc-800">
+                      <span className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 text-blue-400" />
+                        Mutassa a térképen / HUD-on
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={settings.osmFeatures.showTrafficSigns}
+                        onChange={(e) =>
+                          onUpdateSettings({
+                            ...settings,
+                            osmFeatures: { ...settings.osmFeatures, showTrafficSigns: e.target.checked },
+                          })
+                        }
+                        className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between p-2.5 bg-zinc-900/60 rounded-xl cursor-pointer hover:bg-zinc-900 border border-zinc-800">
+                      <span className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                        <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                        Mondja be hangosan közeledéskor
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={settings.osmFeatures.announceTrafficSigns}
+                        onChange={(e) =>
+                          onUpdateSettings({
+                            ...settings,
+                            osmFeatures: { ...settings.osmFeatures, announceTrafficSigns: e.target.checked },
+                          })
+                        }
+                        className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: VOICE CONFIGURATION (TTS) */}
           {activeTab === 'voice' && (
             <div className="space-y-5">
               {/* Voice Enable Toggle */}
@@ -177,7 +961,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 />
               </div>
 
-              {/* What to announce (Specific user prompt requirement!) */}
+              {/* What to announce */}
               <div className="space-y-2.5">
                 <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">
                   Mit mondjon be a hangos beszéd:
@@ -195,7 +979,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         voiceOptions: { ...settings.voiceOptions, announceCity: e.target.checked },
                       })
                     }
-                    className="w-5 h-5 accent-blue-600 rounded"
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
                   />
                 </label>
 
@@ -211,7 +995,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         voiceOptions: { ...settings.voiceOptions, announceStreet: e.target.checked },
                       })
                     }
-                    className="w-5 h-5 accent-blue-600 rounded"
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
                   />
                 </label>
 
@@ -227,7 +1011,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         voiceOptions: { ...settings.voiceOptions, announceRoadNumber: e.target.checked },
                       })
                     }
-                    className="w-5 h-5 accent-blue-600 rounded"
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
                   />
                 </label>
 
@@ -243,7 +1027,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         voiceOptions: { ...settings.voiceOptions, announceLaneInfo: e.target.checked },
                       })
                     }
-                    className="w-5 h-5 accent-blue-600 rounded"
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
                   />
                 </label>
 
@@ -269,7 +1053,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         },
                       })
                     }
-                    className="w-5 h-5 accent-red-600 rounded"
+                    className="w-5 h-5 accent-red-600 rounded cursor-pointer"
                   />
                 </label>
 
@@ -296,7 +1080,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               },
                             })
                           }
-                          className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
                             settings.voiceOptions.hazardWarningDistanceMeters === meters
                               ? 'bg-red-600 text-white border-red-500 font-black'
                               : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-white'
@@ -362,7 +1146,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <button
                 type="button"
                 onClick={handleTestSpeech}
-                className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 text-blue-400 transition-colors"
+                className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 text-blue-400 transition-colors cursor-pointer"
               >
                 <Play className="w-4 h-4" />
                 Beszéd Tesztelése Most
@@ -370,7 +1154,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: DISPLAY OPTIONS */}
+          {/* TAB 4: DISPLAY OPTIONS */}
           {activeTab === 'display' && (
             <div className="space-y-5">
               {/* Theme Toggle */}
@@ -385,7 +1169,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => onUpdateSettings({ ...settings, theme: 'light' })}
-                    className={`p-2 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-bold ${
+                    className={`p-2 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer ${
                       settings.theme === 'light'
                         ? 'bg-amber-500 text-black'
                         : 'text-zinc-400 hover:text-white'
@@ -397,7 +1181,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => onUpdateSettings({ ...settings, theme: 'dark' })}
-                    className={`p-2 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-bold ${
+                    className={`p-2 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer ${
                       settings.theme === 'dark'
                         ? 'bg-blue-600 text-white'
                         : 'text-zinc-400 hover:text-white'
@@ -409,7 +1193,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* What to show on Cockpit Display (User specific requirement!) */}
+              {/* What to show on Cockpit Display */}
               <div className="space-y-2.5">
                 <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">
                   Mit mutasson a műszerfal kijelzőn:
@@ -427,7 +1211,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         displayOptions: { ...settings.displayOptions, showCity: e.target.checked },
                       })
                     }
-                    className="w-5 h-5 accent-blue-600 rounded"
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
                   />
                 </label>
 
@@ -443,7 +1227,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         displayOptions: { ...settings.displayOptions, showStreet: e.target.checked },
                       })
                     }
-                    className="w-5 h-5 accent-blue-600 rounded"
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
                   />
                 </label>
 
@@ -459,7 +1243,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         displayOptions: { ...settings.displayOptions, showRoadNumber: e.target.checked },
                       })
                     }
-                    className="w-5 h-5 accent-blue-600 rounded"
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
                   />
                 </label>
 
@@ -475,7 +1259,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         displayOptions: { ...settings.displayOptions, showPostcode: e.target.checked },
                       })
                     }
-                    className="w-5 h-5 accent-blue-600 rounded"
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
                   />
                 </label>
 
@@ -491,7 +1275,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         displayOptions: { ...settings.displayOptions, showLaneInfo: e.target.checked },
                       })
                     }
-                    className="w-5 h-5 accent-blue-600 rounded"
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
                   />
                 </label>
 
@@ -507,7 +1291,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         displayOptions: { ...settings.displayOptions, showSpeed: e.target.checked },
                       })
                     }
-                    className="w-5 h-5 accent-blue-600 rounded"
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
                   />
                 </label>
 
@@ -523,14 +1307,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         displayOptions: { ...settings.displayOptions, showHeading: e.target.checked },
                       })
                     }
-                    className="w-5 h-5 accent-blue-600 rounded"
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
                   />
                 </label>
               </div>
             </div>
           )}
 
-          {/* TAB 3: DATA IMPORT/EXPORT */}
+          {/* TAB 5: DATA IMPORT/EXPORT */}
           {activeTab === 'data' && (
             <div className="space-y-4">
               <div className="bg-zinc-800/80 p-4 rounded-2xl border border-zinc-700">
@@ -541,7 +1325,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   type="button"
                   onClick={handleExport}
-                  className="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-2 transition-colors"
+                  className="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
                 >
                   <Download className="w-4 h-4" />
                   JSON Fájl Letöltése
@@ -571,7 +1355,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="py-2.5 px-6 bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-sm rounded-xl transition-colors"
+            className="py-2.5 px-6 bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-sm rounded-xl transition-colors cursor-pointer"
           >
             Kész
           </button>

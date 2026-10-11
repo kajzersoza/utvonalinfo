@@ -69,10 +69,23 @@ export interface OSMFeature {
 }
 
 export interface OSMFeatureVisibility {
-  showCrossings: boolean; // Gyalogátkelőhelyek
-  showRailways: boolean; // Vasúti átjárók
-  showTrafficSignals: boolean; // Jelzőlámpák
-  showTrafficSigns: boolean; // Közlekedési táblák
+  showCrossings: boolean; // Gyalogátkelőhelyek mutatása
+  announceCrossings: boolean; // Gyalogátkelőhelyek bemondása
+  showRailways: boolean; // Vasúti átjárók mutatása
+  announceRailways: boolean; // Vasúti átjárók bemondása
+  showTrafficSignals: boolean; // Jelzőlámpák mutatása
+  announceTrafficSignals: boolean; // Jelzőlámpák bemondása
+  showTrafficSigns: boolean; // Közlekedési táblák mutatása
+  announceTrafficSigns: boolean; // Közlekedési táblák bemondása
+}
+
+export interface SoundAlertOptions {
+  enabled: boolean; // Rövid hangjelzések (chimes / pittyegés)
+  volume: number; // 0 - 1
+  playSeverityChimes: boolean; // Fokozatonkénti hangjelzések (1: enyhe, 2: közepes, 3: súlyos, 4: kritikus)
+  playTypeChimes: boolean; // Eltérő hangszín a hibatípus szerint (kátyú, vasút, fekvőrendőr stb.)
+  soundStyle: 'digital' | 'chime' | 'beep' | 'radar';
+  alertMode: 'both' | 'sound_only' | 'voice_only'; // Hangjelzés + Beszéd, Csak hangjelzés, Csak beszéd
 }
 
 export interface GPSState {
@@ -129,6 +142,7 @@ export interface AppSettings {
   theme: 'light' | 'dark';
   displayOptions: DisplayOptions;
   voiceOptions: VoiceOptions;
+  soundAlerts: SoundAlertOptions;
   highAccuracyGPS: boolean;
   showCompassWidget: boolean;
   osmFeatures: OSMFeatureVisibility;

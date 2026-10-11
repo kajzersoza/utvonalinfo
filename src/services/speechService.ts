@@ -140,7 +140,13 @@ class SpeechService {
   /**
    * Alert driver when approaching a registered hazard in their direction
    */
-  public announceHazardAlert(hazard: RoadHazard, distanceMeters: number, options: VoiceOptions) {
+  public announceHazardAlert(
+    hazard: RoadHazard,
+    distanceMeters: number,
+    options: VoiceOptions,
+    alertMode?: 'both' | 'sound_only' | 'voice_only'
+  ) {
+    if (alertMode === 'sound_only') return;
     if (!options.enabled || !options.announceApproachingHazards) return;
 
     // Don't repeat the warning for the same hazard
@@ -164,6 +170,52 @@ class SpeechService {
     const distText = Math.round(distanceMeters / 10) * 10;
 
     const message = `Figyelem! ${distText} méterre ${hazardName} ${laneText}${lateralText}!`;
+    this.speak(message, options);
+  }
+
+  /**
+   * Alert driver when approaching an OSM feature if speech is enabled for that type
+   */
+  public announceOSMFeatureAlert(
+    feature: { id: string; type: string; name: string },
+    distanceMeters: number,
+    options: VoiceOptions,
+    visibility: {
+      announceCrossings?: boolean;
+      announceRailways?: boolean;
+      announceTrafficSignals?: boolean;
+      announceTrafficSigns?: boolean;
+    },
+    alertMode?: 'both' | 'sound_only' | 'voice_only'
+  ) {
+    if (alertMode === 'sound_only') return;
+    if (!options.enabled) return;
+
+    let shouldAnnounce = false;
+    let label = feature.name;
+
+    if (feature.type === 'crossing' && visibility.announceCrossings) {
+      shouldAnnounce = true;
+      label = 'gyalogátkelőhely';
+    } else if (feature.type === 'railway' && visibility.announceRailways) {
+      shouldAnnounce = true;
+      label = 'vasúti átjáró';
+    } else if (feature.type === 'traffic_signals' && visibility.announceTrafficSignals) {
+      shouldAnnounce = true;
+      label = 'forgalmi jelzőlámpa';
+    } else if (feature.type === 'traffic_sign' && visibility.announceTrafficSigns) {
+      shouldAnnounce = true;
+      label = feature.name;
+    }
+
+    if (!shouldAnnounce) return;
+
+    const key = `osm-${feature.id}`;
+    if (this.warnedHazards.has(key)) return;
+    this.warnedHazards.add(key);
+
+    const distText = Math.max(10, Math.round(distanceMeters / 10) * 10);
+    const message = `Figyelem! ${distText} méterre ${label}!`;
     this.speak(message, options);
   }
 }

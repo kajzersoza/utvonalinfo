@@ -15,8 +15,14 @@ import {
   loadHazards,
   saveHazards,
 } from './services/storageService';
-import { fetchOSMRoadInfo, calculateDistanceMeters, SAMPLE_OSM_FEATURES } from './services/osmService';
+import {
+  fetchOSMRoadInfo,
+  calculateDistanceMeters,
+  SAMPLE_OSM_FEATURES,
+  fetchNearbyOSMFeatures,
+} from './services/osmService';
 import { speechService } from './services/speechService';
+import { audioAlertService } from './services/audioAlertService';
 import {
   SIMULATED_ROUTE_M7,
   SIMULATED_ROUTE_CITY,
@@ -175,7 +181,52 @@ export default function App() {
   }, [filterMode, cloudHazards, localHazards, currentUser]);
 
   // -------------------------------------------------------------
-  // Proximity & Direction Hazard Warning Check
+  // Online OSM Features Live Downloader (Overpass API)
+  // -------------------------------------------------------------
+  const [isRefreshingOsm, setIsRefreshingOsm] = useState(false);
+  const lastOsmFetchCoordsRef = useRef<{ lat: number; lon: number } | null>(null);
+  const lastOsmFetchTimeRef = useRef<number>(0);
+
+  const fetchOnlineOsm = useCallback(
+    async (lat: number, lon: number, force: boolean = false) => {
+      const now = Date.now();
+      // Throttle if moved less than 130m and within 18s unless force is true
+      if (!force && lastOsmFetchCoordsRef.current) {
+        const dist = calculateDistanceMeters(
+          lastOsmFetchCoordsRef.current.lat,
+          lastOsmFetchCoordsRef.current.lon,
+          lat,
+          lon
+        );
+        if (dist < 130 && now - lastOsmFetchTimeRef.current < 18000) {
+          return;
+        }
+      }
+
+      try {
+        setIsRefreshingOsm(true);
+        const onlineFeatures = await fetchNearbyOSMFeatures(lat, lon, force);
+        if (onlineFeatures && onlineFeatures.length > 0) {
+          setOsmFeatures(onlineFeatures);
+          lastOsmFetchCoordsRef.current = { lat, lon };
+          lastOsmFetchTimeRef.current = Date.now();
+        }
+      } catch {
+        // Fallback to cached features
+      } finally {
+        setIsRefreshingOsm(false);
+      }
+    },
+    []
+  );
+
+  // Initial fetch on app launch
+  useEffect(() => {
+    fetchOnlineOsm(gps.latitude, gps.longitude);
+  }, [fetchOnlineOsm]);
+
+  // -------------------------------------------------------------
+  // Proximity & Direction Hazard Warning Check (Sound + Voice)
   // -------------------------------------------------------------
   const [approachingHazards, setApproachingHazards] = useState<{
     hazard: RoadHazard;
@@ -201,15 +252,60 @@ export default function App() {
 
         if (isAhead) {
           matches.push({ hazard: h, distance });
-          // Announce voice alert
-          speechService.announceHazardAlert(h, distance, settings.voiceOptions);
+
+          // 1. Play synthesized short acoustic alert (severity 1, 2, 3, 4 chimes & hazard specific sound)
+          audioAlertService.triggerHazardAudio(h, settings.soundAlerts);
+
+          // 2. Announce voice alert
+          speechService.announceHazardAlert(
+            h,
+            distance,
+            settings.voiceOptions,
+            settings.soundAlerts.alertMode
+          );
         }
       }
 
       matches.sort((a, b) => a.distance - b.distance);
       setApproachingHazards(matches);
     },
-    [activeHazards, settings.voiceOptions]
+    [activeHazards, settings.voiceOptions, settings.soundAlerts]
+  );
+
+  // -------------------------------------------------------------
+  // Proximity OSM Features Check (Crossing, Railway, Signals, Signs)
+  // -------------------------------------------------------------
+  const checkApproachingOsmFeatures = useCallback(
+    (currentLat: number, currentLon: number) => {
+      const maxDistance = 220; // 220 méteres figyelmeztetési körzet
+
+      for (const f of osmFeatures) {
+        const dist = calculateDistanceMeters(currentLat, currentLon, f.latitude, f.longitude);
+        if (dist <= maxDistance) {
+          // Check if this type has audio or voice enabled
+          const shouldPlayAudio =
+            settings.soundAlerts.enabled &&
+            settings.soundAlerts.alertMode !== 'voice_only' &&
+            ((f.type === 'crossing' && settings.osmFeatures.announceCrossings) ||
+              (f.type === 'railway' && settings.osmFeatures.announceRailways) ||
+              (f.type === 'traffic_signals' && settings.osmFeatures.announceTrafficSignals) ||
+              (f.type === 'traffic_sign' && settings.osmFeatures.announceTrafficSigns));
+
+          if (shouldPlayAudio) {
+            audioAlertService.triggerFeatureAudio(f.type, settings.soundAlerts);
+          }
+
+          speechService.announceOSMFeatureAlert(
+            f,
+            dist,
+            settings.voiceOptions,
+            settings.osmFeatures,
+            settings.soundAlerts.alertMode
+          );
+        }
+      }
+    },
+    [osmFeatures, settings.soundAlerts, settings.voiceOptions, settings.osmFeatures]
   );
 
   // -------------------------------------------------------------
@@ -274,8 +370,14 @@ export default function App() {
           status: 'active',
         });
 
-        // Check approaching hazards
+        // Check approaching hazards (Sound chimes & Speech)
         checkApproachingHazards(latitude, longitude, finalHeading);
+
+        // Check approaching OSM features (Crossings, railways, signals, signs)
+        checkApproachingOsmFeatures(latitude, longitude);
+
+        // Automatically fetch nearby online OSM features in background
+        fetchOnlineOsm(latitude, longitude);
 
         // Fetch OpenStreetMap reverse geocoded data
         try {
@@ -310,7 +412,14 @@ export default function App() {
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [isSimulating, settings.highAccuracyGPS, settings.voiceOptions, checkApproachingHazards]);
+  }, [
+    isSimulating,
+    settings.highAccuracyGPS,
+    settings.voiceOptions,
+    checkApproachingHazards,
+    checkApproachingOsmFeatures,
+    fetchOnlineOsm,
+  ]);
 
   // -------------------------------------------------------------
   // GPS Drive Simulation Timer
@@ -353,9 +462,11 @@ export default function App() {
       });
 
       checkApproachingHazards(pt.lat, pt.lon, pt.heading);
+      checkApproachingOsmFeatures(pt.lat, pt.lon);
+      fetchOnlineOsm(pt.lat, pt.lon);
       return nextIdx;
     });
-  }, [getSelectedRoute, checkApproachingHazards]);
+  }, [getSelectedRoute, checkApproachingHazards, checkApproachingOsmFeatures, fetchOnlineOsm]);
 
   // Simulation Interval Loop
   useEffect(() => {
@@ -832,6 +943,13 @@ export default function App() {
         onUpdateSettings={setSettings}
         hazards={activeHazards}
         onImportHazards={(newHazards) => setLocalHazards(newHazards)}
+        onRefreshOnlineOsm={async () => {
+          showToast('Valós online OSM adatok lekérése a körzetből...');
+          await fetchOnlineOsm(gps.latitude, gps.longitude, true);
+          showToast(`✅ OSM adatok frissítve (${osmFeatures.length} valós elem a körzetben)!`);
+        }}
+        isRefreshingOsm={isRefreshingOsm}
+        osmFeatureCount={osmFeatures.length}
       />
 
       {/* 6. Auth Modal (Registration & Login with Email / Google) */}

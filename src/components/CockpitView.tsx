@@ -111,7 +111,10 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
               id: 'crossing',
               icon: '🚶',
               label: 'Gyalogátkelőhely',
-              match: nearbyOsmFeatures.find((f) => f.feature.type === 'crossing'),
+              isEnabled: settings.osmFeatures.showCrossings,
+              match: settings.osmFeatures.showCrossings
+                ? nearbyOsmFeatures.find((f) => f.feature.type === 'crossing')
+                : undefined,
               activeColor: 'bg-blue-600/35 border-blue-400 text-blue-300 ring-2 ring-blue-500/50',
               badgeColor: 'bg-blue-600 text-white',
             },
@@ -119,7 +122,10 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
               id: 'traffic_signals',
               icon: '🚦',
               label: 'Jelzőlámpa',
-              match: nearbyOsmFeatures.find((f) => f.feature.type === 'traffic_signals'),
+              isEnabled: settings.osmFeatures.showTrafficSignals,
+              match: settings.osmFeatures.showTrafficSignals
+                ? nearbyOsmFeatures.find((f) => f.feature.type === 'traffic_signals')
+                : undefined,
               activeColor: 'bg-emerald-600/35 border-emerald-400 text-emerald-300 ring-2 ring-emerald-500/50',
               badgeColor: 'bg-emerald-600 text-white',
             },
@@ -127,7 +133,10 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
               id: 'railway',
               icon: '🚂',
               label: 'Vasúti átjáró',
-              match: nearbyOsmFeatures.find((f) => f.feature.type === 'railway'),
+              isEnabled: settings.osmFeatures.showRailways,
+              match: settings.osmFeatures.showRailways
+                ? nearbyOsmFeatures.find((f) => f.feature.type === 'railway')
+                : undefined,
               activeColor: 'bg-amber-600/35 border-amber-400 text-amber-300 ring-2 ring-amber-500/50',
               badgeColor: 'bg-amber-500 text-black',
             },
@@ -135,7 +144,10 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
               id: 'traffic_sign',
               icon: '🛑',
               label: 'Közlekedési tábla',
-              match: nearbyOsmFeatures.find((f) => f.feature.type === 'traffic_sign'),
+              isEnabled: settings.osmFeatures.showTrafficSigns,
+              match: settings.osmFeatures.showTrafficSigns
+                ? nearbyOsmFeatures.find((f) => f.feature.type === 'traffic_sign')
+                : undefined,
               activeColor: 'bg-red-600/35 border-red-400 text-red-300 ring-2 ring-red-500/50',
               badgeColor: 'bg-red-600 text-white',
             },
@@ -146,13 +158,15 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
               <div
                 key={item.id}
                 className={`h-full rounded-2xl border flex items-center justify-center transition-all duration-200 relative select-none ${
-                  isActive
+                  !item.isEnabled
+                    ? 'opacity-15 border-zinc-800 grayscale cursor-not-allowed'
+                    : isActive
                     ? `${item.activeColor} shadow-md shadow-black/30 scale-102 animate-pulse`
                     : isDark
-                    ? 'bg-zinc-900/40 border-zinc-800/60 opacity-30 grayscale'
-                    : 'bg-zinc-200/50 border-zinc-300/60 opacity-35 grayscale'
+                    ? 'bg-zinc-900/40 border-zinc-800/60 opacity-35 grayscale'
+                    : 'bg-zinc-200/50 border-zinc-300/60 opacity-40 grayscale'
                 }`}
-                title={item.label}
+                title={item.isEnabled ? item.label : `${item.label} (Kikapcsolva)`}
               >
                 {/* Bigger Icon as requested */}
                 <span className="text-2xl sm:text-3xl leading-none">

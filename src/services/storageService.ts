@@ -30,11 +30,23 @@ export const DEFAULT_SETTINGS: AppSettings = {
     announceApproachingHazards: true,
     hazardWarningDistanceMeters: 200,
   },
+  soundAlerts: {
+    enabled: true,
+    volume: 0.85,
+    playSeverityChimes: true,
+    playTypeChimes: true,
+    soundStyle: 'digital',
+    alertMode: 'both',
+  },
   osmFeatures: {
     showCrossings: true,
+    announceCrossings: true,
     showRailways: true,
+    announceRailways: true,
     showTrafficSignals: true,
+    announceTrafficSignals: true,
     showTrafficSigns: true,
+    announceTrafficSigns: true,
   },
 };
 
@@ -128,6 +140,7 @@ export function loadSettings(): AppSettings {
       ...parsed,
       displayOptions: { ...DEFAULT_SETTINGS.displayOptions, ...(parsed.displayOptions || {}) },
       voiceOptions: { ...DEFAULT_SETTINGS.voiceOptions, ...(parsed.voiceOptions || {}) },
+      soundAlerts: { ...DEFAULT_SETTINGS.soundAlerts, ...(parsed.soundAlerts || {}) },
       osmFeatures: { ...DEFAULT_SETTINGS.osmFeatures, ...(parsed.osmFeatures || {}) },
     };
   } catch {
