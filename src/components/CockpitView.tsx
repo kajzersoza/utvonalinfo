@@ -54,48 +54,51 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
 
   return (
     <div className="flex flex-col h-full w-full justify-between gap-3 sm:gap-4 p-2 sm:p-4 select-none">
-      {/* 1. Top Driver Info Board: Postal code + City in ONE LINE without position icon & larger font */}
+      {/* 1. Top Driver Info Board: Postal code + City + Street with FIXED HEIGHT, and data above city moved to the right side */}
       <div
-        className={`rounded-3xl p-4 sm:p-6 border shadow-xl backdrop-blur-md transition-colors ${
+        className={`rounded-3xl px-4 sm:px-6 py-3 sm:py-4 border shadow-xl backdrop-blur-md transition-colors h-28 sm:h-32 shrink-0 flex items-center justify-between gap-3 ${
           isDark
             ? 'bg-zinc-900/90 border-zinc-800 text-white'
             : 'bg-white border-zinc-200 text-zinc-900'
         }`}
       >
-        {/* Top Badges Row: Road number badge if present */}
+        {/* Left: City Name and Address with Fixed Heights to prevent any layout shifts */}
+        <div className="flex-1 min-w-0 flex flex-col justify-center h-full overflow-hidden">
+          {/* POSTAL CODE AND CITY IN ONE LINE, LARGER FONT */}
+          {displayOptions.showCity && (
+            <div className="h-8 sm:h-9 flex items-center text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-amber-400 leading-tight truncate">
+              {roadInfo.postcode ? `${roadInfo.postcode} ` : ''}
+              {roadInfo.city || 'Helymeghatározás...'}
+            </div>
+          )}
+
+          {/* Street Name + House Number (menetirány szerinti házszám) */}
+          {displayOptions.showStreet && (
+            <div className="h-7 sm:h-8 flex items-baseline gap-2 mt-0.5 overflow-hidden">
+              <h1 className="font-extrabold text-lg sm:text-2xl tracking-tight leading-tight truncate">
+                {roadInfo.roadName || 'Jelenlegi útszakasz keresése...'}
+              </h1>
+              {roadInfo.houseNumber && (
+                <span className="text-lg sm:text-2xl font-black text-cyan-400 shrink-0">
+                  {roadInfo.houseNumber}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Right Side: Data previously above the city (Road number badge) moved to the right side */}
         {displayOptions.showRoadNumber && roadInfo.roadNumber && (
-          <div className="mb-2">
+          <div className="shrink-0 flex items-center justify-end pl-2">
             <span
-              className={`px-3.5 py-1 rounded-xl font-black text-sm sm:text-base tracking-wider shadow-md inline-block ${
+              className={`px-3.5 py-1.5 sm:px-5 sm:py-2.5 rounded-2xl font-black text-base sm:text-xl md:text-2xl tracking-wider shadow-lg inline-flex items-center justify-center ${
                 isHighway
-                  ? 'bg-blue-600 text-white ring-2 ring-blue-400'
-                  : 'bg-emerald-600 text-white ring-2 ring-emerald-400'
+                  ? 'bg-blue-600 text-white ring-2 ring-blue-400 shadow-blue-500/30'
+                  : 'bg-emerald-600 text-white ring-2 ring-emerald-400 shadow-emerald-500/30'
               }`}
             >
               {roadInfo.roadNumber}
             </span>
-          </div>
-        )}
-
-        {/* POSTAL CODE AND CITY IN ONE LINE, NO POSITION ICON, LARGER FONT (User Request) */}
-        {displayOptions.showCity && (
-          <div className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight text-amber-400 leading-tight">
-            {roadInfo.postcode ? `${roadInfo.postcode} ` : ''}
-            {roadInfo.city || 'Helymeghatározás...'}
-          </div>
-        )}
-
-        {/* Street Name + House Number (menetirány szerinti házszám) */}
-        {displayOptions.showStreet && (
-          <div className="mt-1 flex items-baseline gap-2 flex-wrap">
-            <h1 className="font-extrabold text-xl sm:text-2xl md:text-3xl tracking-tight leading-tight">
-              {roadInfo.roadName || 'Jelenlegi útszakasz keresése...'}
-            </h1>
-            {roadInfo.houseNumber && (
-              <span className="text-xl sm:text-2xl md:text-3xl font-black text-cyan-400">
-                {roadInfo.houseNumber}
-              </span>
-            )}
           </div>
         )}
       </div>

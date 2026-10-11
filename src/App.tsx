@@ -37,8 +37,13 @@ export default function App() {
   const [hazards, setHazards] = useState<RoadHazard[]>(() => loadHazards());
   const [osmFeatures, setOsmFeatures] = useState<OSMFeature[]>(SAMPLE_OSM_FEATURES);
 
-  // 2. Navigation State
-  const [activeTab, setActiveTab] = useState<'split' | 'cockpit' | 'map' | 'list'>('split');
+  // 2. Navigation State - Mobil nézetben a műszerfal a kezdő képernyő
+  const [activeTab, setActiveTab] = useState<'split' | 'cockpit' | 'map' | 'list'>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      return 'cockpit';
+    }
+    return 'split';
+  });
 
   // 3. Cockpit & GPS State
   const [gps, setGps] = useState<GPSState>({
