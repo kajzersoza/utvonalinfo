@@ -305,7 +305,7 @@ export const MapView: React.FC<MapViewProps> = ({
           </div>
         </div>
 
-        ${hazard.notes ? `<div style="font-size: 11px; font-style: italic; color: #374151; margin-bottom: 8px; background: #fffbeb; padding: 4px 6px; border-radius: 6px; border-left: 3px solid #f59e0b;">"${hazard.notes}"</div>` : ''}
+        ${hazard.notes ? `<div style="font-size: 11px; font-style: italic; color: #374151; margin-bottom: 8px; background: #fffbeb; padding: 4px 6px; border-radius: 6px; border-left: 3px solid #f59e0b;">"${hazard.notes}" <div style="font-size: 9px; font-weight: bold; color: #b45309; margin-top: 2px;">🔒 Saját offline megjegyzés</div></div>` : ''}
 
         <div style="display: flex; gap: 6px; margin-top: 4px;">
           <button id="btn-edit-${hazard.id}" type="button" style="flex: 1; padding: 7px 10px; background: #2563eb; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 11px; cursor: pointer;">
@@ -855,26 +855,26 @@ export const MapView: React.FC<MapViewProps> = ({
       )}
 
       {/* Top Left: Status & Instructions */}
-      <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 max-w-[280px] sm:max-w-none">
-        <div className="bg-zinc-900/95 backdrop-blur-md border border-zinc-700 px-3 py-1.5 rounded-2xl shadow-lg flex items-center gap-2 text-xs font-bold text-white">
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-2 max-w-[calc(100%-24px)]">
+        <div className="bg-zinc-900/95 backdrop-blur-md border border-zinc-700 px-3 py-1.5 rounded-2xl shadow-lg flex items-center gap-2 text-xs font-bold text-white shrink-0">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
           <span>{currentLayer.name}</span>
           <span className="text-zinc-400 font-normal">({hazards.length} rögzített hiba)</span>
         </div>
 
-        <div className="bg-zinc-900/85 backdrop-blur-md border border-zinc-700/80 px-3 py-1.5 rounded-xl text-[11px] text-zinc-300 shadow">
-          {isPlacementMode ? (
-            <span className="text-amber-400 font-bold animate-pulse">
-              🎯 Kattints a térképre a kívánt helyre az úthiba elhelyezéséhez!
-            </span>
-          ) : (
-            <span>🖐️ Kattints a térképre új hiba lehelyezéséhez! A meglévő hibák húzhatók és forgathatók.</span>
-          )}
-        </div>
+        {isPlacementMode ? (
+          <div className="bg-red-950/90 backdrop-blur-md border border-red-500/80 px-3 py-1.5 rounded-xl text-[11px] text-amber-300 shadow font-bold animate-pulse">
+            🎯 Kattints a kívánt helyre az úthiba elhelyezéséhez!
+          </div>
+        ) : (
+          <div className="hidden md:flex bg-zinc-900/80 backdrop-blur-md border border-zinc-700/80 px-2.5 py-1.5 rounded-xl text-[11px] text-zinc-300 shadow">
+            <span>🖐️ Kattints a térképre új hiba lehelyezéséhez (húzható & forgatható)</span>
+          </div>
+        )}
       </div>
 
-      {/* Top Right Controls Toolbar */}
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+      {/* Controls Toolbar: Brought lower down to prevent covering the information / road labels underneath */}
+      <div className="absolute top-14 sm:top-14 right-3 z-10 flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end max-w-[calc(100%-24px)]">
         {/* Placement Mode Toggle Button */}
         <button
           type="button"
@@ -1032,7 +1032,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
       {/* Floating Hazards List Panel (Direct in-map List View!) */}
       {isListPanelOpen && (
-        <div className="absolute top-16 right-3 bottom-16 z-30 w-80 sm:w-96 bg-zinc-900/98 backdrop-blur-xl border border-zinc-700 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-white animate-in slide-in-from-right duration-200">
+        <div className="absolute top-28 sm:top-28 right-3 bottom-12 z-30 w-80 sm:w-96 bg-zinc-900/98 backdrop-blur-xl border border-zinc-700 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-white animate-in slide-in-from-right duration-200">
           {/* Header */}
           <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
             <div className="flex items-center gap-2">
@@ -1140,6 +1140,15 @@ export const MapView: React.FC<MapViewProps> = ({
                       </span>
                       <span>{hazard.laneCount} sáv ({hazard.laneNumber}. sáv)</span>
                     </div>
+
+                    {hazard.notes && (
+                      <div className="text-[11px] text-amber-300 bg-amber-950/30 border border-amber-600/30 p-2 rounded-xl flex items-start justify-between gap-1.5">
+                        <span className="italic">"{hazard.notes}"</span>
+                        <span className="shrink-0 text-[9px] font-bold px-1 py-0.5 rounded bg-zinc-800 text-amber-400 border border-amber-500/30">
+                          🔒 Offline
+                        </span>
+                      </div>
+                    )}
 
                     {/* Card Actions */}
                     <div className="flex items-center justify-between gap-2 pt-1">

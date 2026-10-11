@@ -474,10 +474,13 @@ export const HazardList: React.FC<HazardListProps> = ({
                   </div>
                 </div>
 
-                {/* Notes banner */}
+                {/* Notes banner (offline only in private account) */}
                 {hazard.notes && (
-                  <div className="mt-2.5 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl">
-                    "{hazard.notes}"
+                  <div className="mt-2.5 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl flex items-start justify-between gap-2">
+                    <span className="italic">"{hazard.notes}"</span>
+                    <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-amber-400 border border-amber-500/30">
+                      🔒 Offline megjegyzés
+                    </span>
                   </div>
                 )}
               </div>

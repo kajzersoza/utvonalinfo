@@ -14,6 +14,9 @@ import {
   saveSettings,
   loadHazards,
   saveHazards,
+  getPrivateHazardNotes,
+  savePrivateHazardNote,
+  deletePrivateHazardNote,
 } from './services/storageService';
 import {
   fetchOSMRoadInfo,
@@ -158,15 +161,25 @@ export default function App() {
 
   // Compute Active Displayed Hazards based on filterMode
   const activeHazards = useMemo(() => {
+    const privateNotes = getPrivateHazardNotes();
+    const enrichWithPrivateNotes = (list: RoadHazard[]): RoadHazard[] => {
+      return list.map((h) => {
+        if (privateNotes[h.id]) {
+          return { ...h, notes: privateNotes[h.id] };
+        }
+        return h;
+      });
+    };
+
     if (filterMode === 'all_online') {
-      return cloudHazards;
+      return enrichWithPrivateNotes(cloudHazards);
     }
     if (filterMode === 'my_hazards') {
       if (!currentUser) return [];
-      return cloudHazards.filter((h) => h.userId === currentUser.uid);
+      return enrichWithPrivateNotes(cloudHazards.filter((h) => h.userId === currentUser.uid));
     }
     if (filterMode === 'local_only') {
-      return localHazards;
+      return enrichWithPrivateNotes(localHazards);
     }
     // Combined mode: Merge cloud + local without duplicates
     const map = new Map<string, RoadHazard>();
@@ -178,7 +191,7 @@ export default function App() {
         map.set(h.id, h);
       }
     }
-    return Array.from(map.values());
+    return enrichWithPrivateNotes(Array.from(map.values()));
   }, [filterMode, cloudHazards, localHazards, currentUser]);
 
   // -------------------------------------------------------------
@@ -646,7 +659,8 @@ export default function App() {
           showToast('Hiba a felhőbeli törlés során.');
         }
       }
-      // Also clean up local if exists
+      // Also clean up local notes and hazards
+      deletePrivateHazardNote(id);
       setLocalHazards((prev) => prev.filter((h) => h.id !== id));
     },
     [cloudHazards, showToast]
@@ -689,6 +703,13 @@ export default function App() {
 
   const handleSaveHazard = useCallback(
     async (savedHazard: RoadHazard, saveToCloud: boolean) => {
+      // Megjegyzés kezelése: csak offline, a saját fiókban tárolódik!
+      if (savedHazard.notes && savedHazard.notes.trim()) {
+        savePrivateHazardNote(savedHazard.id, savedHazard.notes.trim());
+      } else {
+        deletePrivateHazardNote(savedHazard.id);
+      }
+
       if (saveToCloud) {
         if (!currentUser) {
           // If not logged in, prompt user to log in or save locally
@@ -699,9 +720,17 @@ export default function App() {
 
         try {
           await saveHazardToCloud(savedHazard, currentUser);
-          // Remove from local storage if it was there
-          setLocalHazards((prev) => prev.filter((h) => h.id !== savedHazard.id));
-          showToast('☁️ Úthiba sikeresen feltöltve a felhőbe!');
+          // Megtartjuk helyben is a privát megjegyzéssel és offline eléréssel
+          setLocalHazards((prev) => {
+            const idx = prev.findIndex((h) => h.id === savedHazard.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = { ...savedHazard, isOnline: true };
+              return next;
+            }
+            return [{ ...savedHazard, isOnline: true }, ...prev];
+          });
+          showToast('☁️ Úthiba feltöltve! (A megjegyzés csak offline a saját fiókodban maradt)');
         } catch (e) {
           showToast('Hiba a felhőbe mentéskor, helyileg mentve.');
           setLocalHazards((prev) => [savedHazard, ...prev.filter((h) => h.id !== savedHazard.id)]);

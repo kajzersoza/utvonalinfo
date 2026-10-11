@@ -199,7 +199,9 @@ function sanitizeHazardPayload(hazard: RoadHazard, user: UserProfile | null) {
     laneNumber: Number(hazard.laneNumber) || 1,
     hazardType: hazard.hazardType || 'other',
     severity: hazard.severity || 'medium',
-    notes: String(hazard.notes || '').slice(0, 500),
+    // Adatvédelmi szabály: a megjegyzést online feltöltéskor NEM töltjük fel!
+    // A megjegyzés kizárólag offline / a saját fiókban, helyi tárolóban jelenik meg.
+    notes: '',
     resolved: Boolean(hazard.resolved),
     status: hazard.status || 'active',
     verifiedByAdmin: Boolean(hazard.verifiedByAdmin),
@@ -302,8 +304,11 @@ export async function updateHazardInCloud(
   const path = `roadHazards/${hazardId}`;
   try {
     const docRef = doc(db, 'roadHazards', hazardId);
+    const sanitizedUpdates = { ...updates };
+    // Megjegyzés nem frissülhet/kerülhet a felhőbe
+    delete sanitizedUpdates.notes;
     await updateDoc(docRef, {
-      ...updates,
+      ...sanitizedUpdates,
       updatedAt: new Date().toISOString(),
     });
   } catch (err) {

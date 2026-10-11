@@ -112,46 +112,65 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
 
   return (
     <div className="flex flex-col h-full w-full justify-between gap-3 sm:gap-4 p-2 sm:p-4 select-none">
-      {/* 1. Top Driver Info Board: Postal code + City + Street / Road Number with STRICT FIXED HEIGHT (h-28 sm:h-32) */}
-      {/* Speed limit sign placed on the right side of the city card as requested */}
+      {/* 1. Top Driver Info Board: 3 ROWS (1: Postcode above, 2: City / KRESZ sign, 3: Street/Road number below) */}
+      {/* Strict fixed height with enlarged typography for mobile and desktop as requested */}
       <div
-        className={`rounded-3xl px-4 sm:px-6 py-3 sm:py-4 border shadow-xl backdrop-blur-md transition-colors h-28 sm:h-32 max-h-28 sm:max-h-32 shrink-0 flex items-center justify-between gap-3 overflow-hidden ${
+        className={`rounded-3xl px-3 sm:px-5 py-2 sm:py-2.5 border shadow-xl backdrop-blur-md transition-colors h-32 sm:h-36 max-h-32 sm:max-h-36 shrink-0 flex items-center justify-between gap-2.5 sm:gap-3 overflow-hidden ${
           isDark
             ? 'bg-zinc-900/90 border-zinc-800 text-white'
             : 'bg-white border-zinc-200 text-zinc-900'
         }`}
       >
-        {/* Left: City Name and Address with Fixed Heights to prevent any layout shifts */}
-        <div className="flex-1 min-w-0 flex flex-col justify-center h-full overflow-hidden">
-          {/* POSTAL CODE AND CITY IN ONE LINE + CITY LIMIT (VÁROSTÁBLA) BADGE */}
-          {displayOptions.showCity && (
-            <div className="h-8 sm:h-9 flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-amber-400 leading-tight truncate">
-              <span className="truncate">
-                {roadInfo.postcode ? `${roadInfo.postcode} ` : ''}
-                {roadInfo.city || 'Helymeghatározás...'}
+        {/* Left: 3-Row Layout (Postcode -> City/KRESZ sign -> Street/Road) */}
+        <div className="flex-1 min-w-0 flex flex-col justify-between h-full py-0.5 overflow-hidden">
+          {/* 1. SOR: Irányítószám (Postcode) felül - MOBILON IS NAGYOBB BETŰKKEL */}
+          <div className="flex items-center text-sm sm:text-base md:text-lg font-mono font-bold tracking-wider text-amber-500/95 dark:text-amber-400 leading-none overflow-hidden shrink-0">
+            {displayOptions.showPostcode !== false && roadInfo.postcode ? (
+              <span className="truncate flex items-center gap-1.5">
+                <span className="text-sm sm:text-base">📮</span>
+                <span className="tracking-widest font-black text-sm sm:text-base md:text-lg">{roadInfo.postcode}</span>
               </span>
+            ) : (
+              <span className="text-xs sm:text-sm text-zinc-400 font-mono tracking-wider uppercase font-semibold">
+                GPS ÚTINFO
+              </span>
+            )}
+          </div>
 
-              {/* Town boundary / Várostábla indicator */}
+          {/* 2. SOR: Település neve - KRESZ tábla ha van az OSM-ben, sima szöveg ha nincs - MOBILON IS NAGYOBB BETŰKKEL */}
+          {displayOptions.showCity && (
+            <div className="flex items-center overflow-hidden my-0.5 shrink-0">
               {displayOptions.showCityLimitSign !== false &&
-                (approachingCityLimit || roadInfo.isCityLimit) && (
-                  <span
-                    className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border-2 border-black text-black text-[11px] sm:text-xs font-black tracking-wider uppercase shadow-md animate-pulse"
-                    title="Településhatár / Várostábla (Lakott terület 50 km/h)"
-                  >
-                    🏙️ {approachingCityLimit?.feature.cityLimitName || roadInfo.cityLimitName || roadInfo.city || 'VÁROSHATÁR'}
+              (approachingCityLimit || roadInfo.isCityLimit) ? (
+                /* Magyar KRESZ Helységnévtábla: fehér alapon fekete keret, fekete vastag betűk */
+                <div
+                  className="inline-flex items-center px-3 py-1 rounded-[4px] bg-white border-2 sm:border-[2.5px] border-black text-black shadow-md shrink-0 max-w-full"
+                  title="KRESZ Helységnévtábla (Lakott terület - Megengedett legnagyobb sebesség: 50 km/h)"
+                >
+                  <span className="font-black text-base sm:text-lg md:text-xl lg:text-2xl tracking-wider uppercase font-sans text-black leading-none truncate">
+                    {approachingCityLimit?.feature.cityLimitName ||
+                      roadInfo.cityLimitName ||
+                      roadInfo.city ||
+                      'TELEPÜLÉS'}
                   </span>
-                )}
+                </div>
+              ) : (
+                /* Sima településnév kiírás ha nincs tábla az OSM-ben */
+                <span className="text-2xl sm:text-3xl md:text-4xl font-black text-amber-400 tracking-tight leading-none truncate">
+                  {roadInfo.city || 'Helymeghatározás...'}
+                </span>
+              )}
             </div>
           )}
 
-          {/* Street Name OR Road Number (only in one place, here if no street) + House Number */}
+          {/* 3. SOR: Alatta az utca ill. út száma - MOBILON IS NAGYOBB BETŰKKEL */}
           {displayOptions.showStreet && (
-            <div className="h-7 sm:h-8 flex items-baseline gap-2 mt-0.5 overflow-hidden">
-              <h1 className="font-extrabold text-lg sm:text-2xl tracking-tight leading-tight truncate">
+            <div className="flex items-baseline gap-2 overflow-hidden shrink-0">
+              <h1 className="font-extrabold text-base sm:text-lg md:text-xl lg:text-2xl tracking-tight leading-snug truncate">
                 {streetRowTitle}
               </h1>
               {roadInfo.houseNumber && !isGenericOrHighway && (
-                <span className="text-lg sm:text-2xl font-black text-cyan-400 shrink-0">
+                <span className="text-base sm:text-lg md:text-xl font-black text-cyan-400 shrink-0">
                   {roadInfo.houseNumber}
                 </span>
               )}
@@ -159,25 +178,25 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
           )}
         </div>
 
-        {/* Right Side: Speed limit sign placed on the right side of the city card as requested */}
+        {/* Right Side: Speed limit sign placed on the right side of the city card */}
         {displayOptions.showSpeedLimit !== false && (
           <div className="shrink-0 flex items-center justify-end pl-2">
             <div
-              className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white border-4 sm:border-[5px] border-red-600 flex flex-col items-center justify-center shadow-lg relative select-none transition-transform ${
+              className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white border-4 sm:border-[5px] border-red-600 flex flex-col items-center justify-center shadow-lg relative select-none transition-transform ${
                 isSpeedExceeded ? 'ring-4 ring-red-500/80 scale-105 animate-pulse' : ''
               }`}
               title={`Sebességkorlátozás: ${activeSpeedLimit} km/h${isSpeedExceeded ? ' - Sebességtúllépés!' : ''}`}
             >
-              <span className="text-black font-black text-xl sm:text-2xl font-mono leading-none tracking-tight">
+              <span className="text-black font-black text-2xl sm:text-3xl font-mono leading-none tracking-tight">
                 {activeSpeedLimit}
               </span>
-              <span className="text-[8px] sm:text-[9px] font-black text-zinc-600 leading-none -mt-0.5">
+              <span className="text-[9px] sm:text-[10px] font-black text-zinc-600 leading-none -mt-0.5">
                 km/h
               </span>
 
               {/* Distance badge if approaching an ahead speed sign */}
               {approachingSpeedSign && (
-                <span className="absolute -bottom-2 bg-red-600 text-white font-mono text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-md leading-none">
+                <span className="absolute -bottom-2 bg-red-600 text-white font-mono text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-md leading-none">
                   {Math.round(approachingSpeedSign.distance)}m
                 </span>
               )}

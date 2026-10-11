@@ -200,3 +200,45 @@ export function importHazardsJSON(jsonString: string): RoadHazard[] | null {
     return null;
   }
 }
+
+// -------------------------------------------------------------
+// Offline Private Notes Storage
+// "online feltöltésnél a megjegyzést nem kell feltölteni,
+// azt csak offline a saját fiókban jelenjen meg"
+// -------------------------------------------------------------
+const PRIVATE_NOTES_STORAGE_KEY = 'utinfo_private_notes_v1';
+
+export function getPrivateHazardNotes(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(PRIVATE_NOTES_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function savePrivateHazardNote(hazardId: string, notes: string): void {
+  try {
+    const all = getPrivateHazardNotes();
+    if (notes && notes.trim()) {
+      all[hazardId] = notes.trim();
+    } else {
+      delete all[hazardId];
+    }
+    localStorage.setItem(PRIVATE_NOTES_STORAGE_KEY, JSON.stringify(all));
+  } catch (e) {
+    console.error('Failed to save private hazard note', e);
+  }
+}
+
+export function deletePrivateHazardNote(hazardId: string): void {
+  try {
+    const all = getPrivateHazardNotes();
+    if (all[hazardId]) {
+      delete all[hazardId];
+      localStorage.setItem(PRIVATE_NOTES_STORAGE_KEY, JSON.stringify(all));
+    }
+  } catch (e) {
+    console.error('Failed to delete private hazard note', e);
+  }
+}

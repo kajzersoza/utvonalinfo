@@ -527,6 +527,10 @@ export const HazardModal: React.FC<HazardModalProps> = ({
               placeholder="pl. Mély kátyú közvetlenül a felfestés mellett, sötétben nehezen látható..."
               className="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-3 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-red-500"
             />
+            <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-zinc-400">
+              <span className="text-amber-400 font-bold">🔒 Offline megjegyzés:</span>
+              <span>Csak a saját fiókodban/eszközödön látható, online feltöltéskor nem kerül megosztásra.</span>
+            </div>
           </div>
 
           {/* Editable Road Details */}
