@@ -68,25 +68,25 @@ export const Header: React.FC<HeaderProps> = ({
         isDark ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'
       }`}
     >
-      <div className="flex items-center justify-between gap-2 sm:gap-4">
+      <div className="flex items-center justify-between gap-1.5 sm:gap-4">
         {/* Left: Brand & Live GPS Indicator */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-red-600 via-rose-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-red-500/20 shrink-0">
-            <Navigation className="w-5 h-5 fill-white" />
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-red-600 via-rose-600 to-amber-500 flex items-center justify-center text-white shadow-md sm:shadow-lg shadow-red-500/20 shrink-0">
+            <Navigation className="w-4 h-4 sm:w-5 sm:h-5 fill-white" />
           </div>
 
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-black text-lg sm:text-xl tracking-tight">ÚtInfó</span>
-              <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-blue-600 text-white uppercase tracking-wider">
-                OSM & Cloud
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="font-black text-base sm:text-xl tracking-tight leading-none">ÚtInfó</span>
+              <span className="text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded bg-blue-600 text-white uppercase tracking-wider">
+                OSM
               </span>
             </div>
-            <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-1.5 text-[10px] sm:text-xs mt-0.5">
               {/* GPS status badge */}
-              <span className="flex items-center gap-1 font-semibold text-[11px]">
+              <span className="flex items-center gap-1 font-semibold text-[10px] sm:text-[11px]">
                 <span
-                  className={`w-2 h-2 rounded-full ${
+                  className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
                     gps.status === 'simulated'
                       ? 'bg-amber-400 animate-pulse'
                       : gps.status === 'active'
@@ -214,11 +214,11 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Simulator controls */}
           <div className="hidden lg:block">{simulatorControls}</div>
 
-          {/* Sound / Voice toggle */}
+          {/* Sound / Voice toggle (Desktop only, mobile has it in drawer) */}
           <button
             type="button"
             onClick={onToggleVoice}
-            className={`p-2 sm:p-2.5 rounded-2xl border transition-colors ${
+            className={`hidden sm:flex p-2 sm:p-2.5 rounded-2xl border transition-colors shrink-0 ${
               settings.voiceOptions.enabled
                 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30'
                 : isDark
@@ -242,7 +242,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             type="button"
             onClick={onToggleTheme}
-            className={`p-2 sm:p-2.5 rounded-2xl border transition-colors ${
+            className={`p-1.5 sm:p-2.5 rounded-xl sm:rounded-2xl border transition-colors shrink-0 ${
               isDark
                 ? 'bg-zinc-900 border-zinc-800 text-amber-400 hover:bg-zinc-800'
                 : 'bg-zinc-100 border-zinc-200 text-zinc-700 hover:bg-zinc-200'
@@ -252,11 +252,11 @@ export const Header: React.FC<HeaderProps> = ({
             {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
           </button>
 
-          {/* Settings button */}
+          {/* Settings button (Desktop only, mobile has it in drawer) */}
           <button
             type="button"
             onClick={onOpenSettings}
-            className={`p-2 sm:p-2.5 rounded-2xl border transition-colors ${
+            className={`hidden sm:flex p-2 sm:p-2.5 rounded-2xl border transition-colors shrink-0 ${
               isDark
                 ? 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800'
                 : 'bg-zinc-100 border-zinc-200 text-zinc-700 hover:bg-zinc-200'
@@ -267,25 +267,26 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {/* User Account / Admin Button */}
-          <div className="relative">
+          <div className="relative shrink-0">
             {user ? (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 sm:gap-1.5">
                 {user.isAdmin && (
                   <button
                     type="button"
                     onClick={onOpenAdmin}
-                    className="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-2xl border border-amber-500/40 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 font-black text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/10 cursor-pointer"
+                    className="px-2 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl border border-amber-500/40 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 font-black text-xs flex items-center gap-1 shadow-md shadow-amber-500/10 cursor-pointer shrink-0"
                     title="Adminisztrátori moderációs felület megnyitása"
                   >
-                    <ShieldAlert className="w-4 h-4 text-amber-400" />
+                    <ShieldAlert className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />
                     <span className="hidden sm:inline">Admin Pult</span>
+                    <span className="sm:hidden text-[11px]">Admin</span>
                   </button>
                 )}
 
                 <button
                   type="button"
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className={`p-1.5 sm:px-3 sm:py-2 rounded-2xl border flex items-center gap-2 transition-all cursor-pointer ${
+                  className={`p-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl border flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
                     user.isAdmin
                       ? 'border-amber-500/50 bg-amber-500/10 text-amber-200'
                       : isDark
@@ -293,7 +294,7 @@ export const Header: React.FC<HeaderProps> = ({
                       : 'bg-zinc-100 border-zinc-200 text-zinc-800 hover:bg-zinc-200'
                   }`}
                 >
-                  <div className="w-6 h-6 rounded-xl bg-blue-600 text-white font-bold text-xs flex items-center justify-center uppercase">
+                  <div className="w-6 h-6 rounded-lg sm:rounded-xl bg-blue-600 text-white font-bold text-xs flex items-center justify-center uppercase shrink-0">
                     {user.email ? user.email.slice(0, 1) : 'U'}
                   </div>
                   <span className="hidden md:inline text-xs font-bold max-w-[120px] truncate">
@@ -366,10 +367,11 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={onOpenAuth}
-                className="px-3 py-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs flex items-center gap-1.5 shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+                className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl sm:rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs flex items-center gap-1.5 shadow-md shadow-blue-600/20 transition-all cursor-pointer shrink-0"
               >
-                <LogIn className="w-4 h-4" />
-                <span>Belépés / Regisztráció</span>
+                <LogIn className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                <span className="hidden sm:inline">Belépés / Regisztráció</span>
+                <span className="sm:hidden text-xs">Belépés</span>
               </button>
             )}
           </div>
@@ -378,7 +380,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 sm:p-2.5 rounded-2xl border border-zinc-800 text-zinc-300 xl:hidden"
+            className="p-1.5 sm:p-2.5 rounded-xl sm:rounded-2xl border border-zinc-800 text-zinc-300 xl:hidden shrink-0"
             title="Menü"
           >
             {mobileMenuOpen ? <X className="w-4 h-4 sm:w-5 sm:h-5" /> : <Menu className="w-4 h-4 sm:w-5 sm:h-5" />}
@@ -481,6 +483,43 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <List className="w-4 h-4" />
               Úthibák ({hazardCount})
+            </button>
+          </div>
+
+          {/* Quick Voice & Settings for mobile */}
+          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-800/60">
+            <button
+              type="button"
+              onClick={onToggleVoice}
+              className={`p-2.5 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 border ${
+                settings.voiceOptions.enabled
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                  : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+              }`}
+            >
+              {settings.voiceOptions.enabled ? (
+                <>
+                  <Volume2 className="w-4 h-4 text-emerald-400" />
+                  <span>Hang: BE</span>
+                </>
+              ) : (
+                <>
+                  <VolumeX className="w-4 h-4 text-zinc-400" />
+                  <span>Hang: KI</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onOpenSettings();
+                setMobileMenuOpen(false);
+              }}
+              className="p-2.5 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 border bg-zinc-900 text-zinc-300 border-zinc-800"
+            >
+              <Sliders className="w-4 h-4" />
+              <span>Beállítások</span>
             </button>
           </div>
 
