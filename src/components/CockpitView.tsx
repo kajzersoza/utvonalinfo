@@ -16,6 +16,7 @@ interface CockpitViewProps {
   approachingHazards: { hazard: RoadHazard; distance: number }[];
   nearbyOsmFeatures?: { feature: OSMFeature; distance: number }[];
   onTriggerRecordHazard: () => void;
+  onTriggerAddSign: () => void;
   onOpenSettings: () => void;
 }
 
@@ -26,6 +27,7 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
   approachingHazards,
   nearbyOsmFeatures = [],
   onTriggerRecordHazard,
+  onTriggerAddSign,
 }) => {
   const { displayOptions, theme } = settings;
   const isDark = theme === 'dark';
@@ -448,17 +450,44 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
         )}
       </div>
 
-      {/* 5. Giant Driver Quick-Record Button with STRICT FIXED HEIGHT (h-16 sm:h-20) */}
-      <div className="pt-0.5 shrink-0 h-16 sm:h-20 max-h-16 sm:max-h-20">
+      {/* 5. Driver Quick-Record Buttons: Split into 2 parts (Left: Úthiba, Right: Tábla) with STRICT FIXED HEIGHT (h-16 sm:h-20) */}
+      <div className="pt-0.5 shrink-0 h-16 sm:h-20 max-h-16 sm:max-h-20 grid grid-cols-2 gap-2 sm:gap-3">
+        {/* Left: Original Hazard Recording */}
         <button
           type="button"
           onClick={onTriggerRecordHazard}
-          className="w-full h-full rounded-3xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-2xl sm:text-3xl md:text-4xl shadow-2xl shadow-red-600/40 border-2 border-white/30 flex items-center justify-center gap-3 sm:gap-4 transition-transform active:scale-97 cursor-pointer"
+          className="h-full rounded-2xl sm:rounded-3xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black shadow-xl shadow-red-600/30 border-2 border-white/30 flex items-center justify-center gap-1.5 sm:gap-3 transition-transform active:scale-97 cursor-pointer px-2 sm:px-3 overflow-hidden"
+          title="Úthiba rögzítése (Kátyú, csatornafedél, úthiba)"
         >
-          <AlertOctagon className="w-7 h-7 sm:w-9 sm:h-9 text-white animate-bounce shrink-0" />
-          <span className="tracking-tight text-center drop-shadow-md">
-            ÚTHIBA RÖGZÍTÉSE
-          </span>
+          <AlertOctagon className="w-5 h-5 sm:w-8 sm:h-8 text-white animate-bounce shrink-0" />
+          <div className="flex flex-col items-start leading-tight text-left min-w-0">
+            <span className="tracking-tight drop-shadow-md text-xs sm:text-base md:text-lg font-black truncate w-full">
+              ÚTHIBA RÖGZÍTÉS
+            </span>
+            <span className="text-[10px] sm:text-xs opacity-85 font-medium hidden sm:inline">
+              Kátyú, hiba
+            </span>
+          </div>
+        </button>
+
+        {/* Right: Traffic Signs Recording (Speed limit / End, City limit start / end) */}
+        <button
+          type="button"
+          onClick={onTriggerAddSign}
+          className="h-full rounded-2xl sm:rounded-3xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white font-black shadow-xl shadow-indigo-600/30 border-2 border-white/30 flex items-center justify-center gap-1.5 sm:gap-3 transition-transform active:scale-97 cursor-pointer px-2 sm:px-3 overflow-hidden"
+          title="Táblák hozzáadása (Sebességkorlátozó, vége, település kezdete/vége)"
+        >
+          <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-white border-2 sm:border-3 border-red-600 flex items-center justify-center font-black text-red-600 text-[10px] sm:text-xs shadow-sm shrink-0">
+            50
+          </div>
+          <div className="flex flex-col items-start leading-tight text-left min-w-0">
+            <span className="tracking-tight drop-shadow-md text-xs sm:text-base md:text-lg font-black truncate w-full">
+              TÁBLA RÖGZÍTÉS
+            </span>
+            <span className="text-[10px] sm:text-xs opacity-85 font-medium hidden sm:inline">
+              Sebesség, Város
+            </span>
+          </div>
         </button>
       </div>
     </div>

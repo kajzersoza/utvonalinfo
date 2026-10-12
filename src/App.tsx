@@ -17,6 +17,9 @@ import {
   getPrivateHazardNotes,
   savePrivateHazardNote,
   deletePrivateHazardNote,
+  loadUserSigns,
+  saveUserSigns,
+  deleteUserSign,
 } from './services/storageService';
 import {
   fetchOSMRoadInfo,
@@ -53,12 +56,19 @@ import { SettingsModal } from './components/SettingsModal';
 import { SimulatorControls } from './components/SimulatorControls';
 import { AuthModal } from './components/AuthModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
+import { SignModal } from './components/SignModal';
 
 export default function App() {
-  // 1. Persistent Local Settings & Local Hazards
+  // 1. Persistent Local Settings & Local Hazards & Signs
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [localHazards, setLocalHazards] = useState<RoadHazard[]>(() => loadHazards());
   const [osmFeatures, setOsmFeatures] = useState<OSMFeature[]>(SAMPLE_OSM_FEATURES);
+  const [userSigns, setUserSigns] = useState<OSMFeature[]>(() => loadUserSigns());
+
+  // Combined OSM Features + User-Recorded Traffic Signs
+  const allOsmFeatures = useMemo(() => {
+    return [...userSigns, ...osmFeatures];
+  }, [userSigns, osmFeatures]);
 
   // 2. Firebase Cloud State & User Profile
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -112,6 +122,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [isSignModalOpen, setIsSignModalOpen] = useState(false);
 
   // 6. Simulator State
   const [isSimulating, setIsSimulating] = useState(false);
@@ -297,7 +308,7 @@ export default function App() {
       // 1. Applies user's configured warning distance (beállított jelzési távolság)
       const maxDistance = settings.voiceOptions.hazardWarningDistanceMeters || 200;
 
-      for (const f of osmFeatures) {
+      for (const f of allOsmFeatures) {
         // 2. STRICTLY check approaching in driver's forward travel direction (windshield forward cone)
         // Returns isAhead = true only if ahead in front of vehicle (<= 65 deg relative angle) and distance >= 5m
         const { isAhead, distance } = isFeatureAheadInDirection(
@@ -346,7 +357,7 @@ export default function App() {
         );
       }
     },
-    [osmFeatures, settings.voiceOptions, settings.soundAlerts, settings.osmFeatures]
+    [allOsmFeatures, settings.voiceOptions, settings.soundAlerts, settings.osmFeatures]
   );
 
   // -------------------------------------------------------------
@@ -355,7 +366,7 @@ export default function App() {
   // -------------------------------------------------------------
   const nearbyOsmFeatures = useMemo(() => {
     const maxWarningDist = settings.voiceOptions.hazardWarningDistanceMeters || 200;
-    return osmFeatures
+    return allOsmFeatures
       .map((f) => {
         const { isAhead, distance } = isFeatureAheadInDirection(
           gps.latitude,
@@ -373,7 +384,7 @@ export default function App() {
       })
       .filter(({ isAhead }) => isAhead)
       .sort((a, b) => a.distance - b.distance);
-  }, [osmFeatures, gps.latitude, gps.longitude, gps.heading, settings.voiceOptions.hazardWarningDistanceMeters]);
+  }, [allOsmFeatures, gps.latitude, gps.longitude, gps.heading, settings.voiceOptions.hazardWarningDistanceMeters]);
 
   // -------------------------------------------------------------
   // Real GPS Geolocation Watcher
@@ -595,6 +606,36 @@ export default function App() {
     setIsEditingHazard(false);
     setIsHazardModalOpen(true);
   };
+
+  const handleTriggerAddSign = useCallback(() => {
+    setIsSignModalOpen(true);
+  }, []);
+
+  const handleSaveSign = useCallback(
+    (newSign: OSMFeature) => {
+      setUserSigns((prev) => {
+        const next = [newSign, ...prev];
+        saveUserSigns(next);
+        return next;
+      });
+      audioAlertService.playTypeChime(newSign.type, settings.soundAlerts);
+      showToast(`🛑 ${newSign.name} sikeresen rögzítve!`);
+    },
+    [settings.soundAlerts, showToast]
+  );
+
+  const handleDeleteSign = useCallback(
+    (signId: string) => {
+      deleteUserSign(signId);
+      setUserSigns((prev) => prev.filter((s) => s.id !== signId));
+      showToast('🗑️ Tábla törölve.');
+    },
+    [showToast]
+  );
+
+  const handleAddSignAtLocation = useCallback((_lat: number, _lon: number) => {
+    setIsSignModalOpen(true);
+  }, []);
 
   const handleAddHazardAtLocation = useCallback(
     async (lat: number, lon: number, heading: number) => {
@@ -865,6 +906,7 @@ export default function App() {
                 approachingHazards={approachingHazards}
                 nearbyOsmFeatures={nearbyOsmFeatures}
                 onTriggerRecordHazard={handleTriggerRecordHazard}
+                onTriggerAddSign={handleTriggerAddSign}
                 onOpenSettings={() => setIsSettingsOpen(true)}
               />
             </div>
@@ -875,13 +917,15 @@ export default function App() {
                 key="split-map"
                 gps={gps}
                 hazards={activeHazards}
-                osmFeatures={osmFeatures}
+                osmFeatures={allOsmFeatures}
                 osmFeatureVisibility={settings.osmFeatures}
                 onToggleOsmFeatureVisibility={handleToggleOsmFeatureVisibility}
                 onAddHazardAtLocation={handleAddHazardAtLocation}
+                onAddSignAtLocation={handleAddSignAtLocation}
                 onSaveHazard={(h) => handleSaveHazard(h, Boolean(currentUser))}
                 onEditHazard={handleEditHazard}
                 onDeleteHazard={handleDeleteHazard}
+                onDeleteOsmFeature={handleDeleteSign}
                 onUpdateHazardPosition={handleUpdateHazardPosition}
                 onUpdateHazardHeading={handleUpdateHazardHeading}
                 theme={settings.theme}
@@ -900,6 +944,7 @@ export default function App() {
               approachingHazards={approachingHazards}
               nearbyOsmFeatures={nearbyOsmFeatures}
               onTriggerRecordHazard={handleTriggerRecordHazard}
+              onTriggerAddSign={handleTriggerAddSign}
               onOpenSettings={() => setIsSettingsOpen(true)}
             />
           </div>
@@ -912,13 +957,15 @@ export default function App() {
               key="full-map"
               gps={gps}
               hazards={activeHazards}
-              osmFeatures={osmFeatures}
+              osmFeatures={allOsmFeatures}
               osmFeatureVisibility={settings.osmFeatures}
               onToggleOsmFeatureVisibility={handleToggleOsmFeatureVisibility}
               onAddHazardAtLocation={handleAddHazardAtLocation}
+              onAddSignAtLocation={handleAddSignAtLocation}
               onSaveHazard={(h) => handleSaveHazard(h, Boolean(currentUser))}
               onEditHazard={handleEditHazard}
               onDeleteHazard={handleDeleteHazard}
+              onDeleteOsmFeature={handleDeleteSign}
               onUpdateHazardPosition={handleUpdateHazardPosition}
               onUpdateHazardHeading={handleUpdateHazardHeading}
               theme={settings.theme}
@@ -1048,6 +1095,17 @@ export default function App() {
           }));
           setActiveTab('map');
         }}
+      />
+
+      {/* 8. Traffic Sign Recording Modal */}
+      <SignModal
+        isOpen={isSignModalOpen}
+        onClose={() => setIsSignModalOpen(false)}
+        onSaveSign={handleSaveSign}
+        onDeleteSign={handleDeleteSign}
+        userSigns={userSigns}
+        gps={gps}
+        roadInfo={roadInfo}
       />
     </div>
   );

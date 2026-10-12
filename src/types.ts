@@ -58,6 +58,12 @@ export interface UserProfile {
 
 export type OSMFeatureType = 'crossing' | 'railway' | 'traffic_signals' | 'traffic_sign' | 'city_limit';
 
+export type TrafficSignCategory =
+  | 'speed_limit'
+  | 'speed_limit_end'
+  | 'city_limit_start'
+  | 'city_limit_end';
+
 export interface OSMFeature {
   id: string;
   type: OSMFeatureType;
@@ -67,6 +73,12 @@ export interface OSMFeature {
   description?: string;
   speedLimit?: number;
   cityLimitName?: string;
+  signCategory?: TrafficSignCategory;
+  isEnd?: boolean; // Vége jelzés (sebességkorlátozás vége vagy település vége)
+  userAdded?: boolean; // Felhasználó által rögzített tábla
+  roadName?: string;
+  roadNumber?: string;
+  timestamp?: number;
 }
 
 export interface OSMFeatureVisibility {
