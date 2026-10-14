@@ -751,17 +751,28 @@ export default function App() {
         deletePrivateHazardNote(savedHazard.id);
       }
 
+      // 1. MINDIG azonnal elmentjük helyileg az eszközön, hogy soha semmilyen adat ne vesszen el!
+      setLocalHazards((prev) => {
+        const idx = prev.findIndex((h) => h.id === savedHazard.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = savedHazard;
+          return next;
+        }
+        return [savedHazard, ...prev];
+      });
+
+      // 2. Ha felhőbe töltést kért a felhasználó:
       if (saveToCloud) {
         if (!currentUser) {
-          // If not logged in, prompt user to log in or save locally
+          // Ha nincs bejelentkezve, értesítjük és megnyitjuk az Auth modált, de az adat MÁR BIZTONSÁGBAN VAN helyben!
           setIsAuthModalOpen(true);
-          showToast('Jelentkezz be email címeddel a felhőbe töltéshez!');
+          showToast('💾 Úthiba elmentve ezen az eszközön! Jelentkezz be a felhőbe való online megosztáshoz.');
           return;
         }
 
         try {
           await saveHazardToCloud(savedHazard, currentUser);
-          // Megtartjuk helyben is a privát megjegyzéssel és offline eléréssel
           setLocalHazards((prev) => {
             const idx = prev.findIndex((h) => h.id === savedHazard.id);
             if (idx >= 0) {
@@ -771,22 +782,12 @@ export default function App() {
             }
             return [{ ...savedHazard, isOnline: true }, ...prev];
           });
-          showToast('☁️ Úthiba feltöltve! (A megjegyzés csak offline a saját fiókodban maradt)');
+          showToast('☁️ Úthiba sikeresen feltöltve a felhőbe!');
         } catch (e) {
-          showToast('Hiba a felhőbe mentéskor, helyileg mentve.');
-          setLocalHazards((prev) => [savedHazard, ...prev.filter((h) => h.id !== savedHazard.id)]);
+          console.warn('Hiba a felhőbe töltéskor:', e);
+          showToast('⚠️ Hiba a felhőbe küldéskor, de a készüléken biztonságosan elmentve!');
         }
       } else {
-        // Save only locally
-        setLocalHazards((prev) => {
-          const idx = prev.findIndex((h) => h.id === savedHazard.id);
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = savedHazard;
-            return next;
-          }
-          return [savedHazard, ...prev];
-        });
         showToast('💾 Úthiba elmentve ezen az eszközön.');
       }
     },
