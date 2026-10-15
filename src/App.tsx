@@ -8,6 +8,7 @@ import {
   OSMFeatureVisibility,
   UserProfile,
   HazardFilterMode,
+  CityLimitStatus,
 } from './types';
 import {
   loadSettings,
@@ -17,9 +18,6 @@ import {
   getPrivateHazardNotes,
   savePrivateHazardNote,
   deletePrivateHazardNote,
-  loadUserSigns,
-  saveUserSigns,
-  deleteUserSign,
 } from './services/storageService';
 import {
   fetchOSMRoadInfo,
@@ -56,19 +54,12 @@ import { SettingsModal } from './components/SettingsModal';
 import { SimulatorControls } from './components/SimulatorControls';
 import { AuthModal } from './components/AuthModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
-import { SignModal } from './components/SignModal';
 
 export default function App() {
-  // 1. Persistent Local Settings & Local Hazards & Signs
+  // 1. Persistent Local Settings & Local Hazards
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [localHazards, setLocalHazards] = useState<RoadHazard[]>(() => loadHazards());
   const [osmFeatures, setOsmFeatures] = useState<OSMFeature[]>(SAMPLE_OSM_FEATURES);
-  const [userSigns, setUserSigns] = useState<OSMFeature[]>(() => loadUserSigns());
-
-  // Combined OSM Features + User-Recorded Traffic Signs
-  const allOsmFeatures = useMemo(() => {
-    return [...userSigns, ...osmFeatures];
-  }, [userSigns, osmFeatures]);
 
   // 2. Firebase Cloud State & User Profile
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -122,7 +113,6 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
-  const [isSignModalOpen, setIsSignModalOpen] = useState(false);
 
   // 6. Simulator State
   const [isSimulating, setIsSimulating] = useState(false);
@@ -308,7 +298,7 @@ export default function App() {
       // 1. Applies user's configured warning distance (beállított jelzési távolság)
       const maxDistance = settings.voiceOptions.hazardWarningDistanceMeters || 200;
 
-      for (const f of allOsmFeatures) {
+      for (const f of osmFeatures) {
         // 2. STRICTLY check approaching in driver's forward travel direction (windshield forward cone)
         // Returns isAhead = true only if ahead in front of vehicle (<= 65 deg relative angle) and distance >= 5m
         const { isAhead, distance } = isFeatureAheadInDirection(
@@ -357,7 +347,7 @@ export default function App() {
         );
       }
     },
-    [allOsmFeatures, settings.voiceOptions, settings.soundAlerts, settings.osmFeatures]
+    [osmFeatures, settings.voiceOptions, settings.soundAlerts, settings.osmFeatures]
   );
 
   // -------------------------------------------------------------
@@ -366,7 +356,7 @@ export default function App() {
   // -------------------------------------------------------------
   const nearbyOsmFeatures = useMemo(() => {
     const maxWarningDist = settings.voiceOptions.hazardWarningDistanceMeters || 200;
-    return allOsmFeatures
+    return osmFeatures
       .map((f) => {
         const { isAhead, distance } = isFeatureAheadInDirection(
           gps.latitude,
@@ -384,7 +374,145 @@ export default function App() {
       })
       .filter(({ isAhead }) => isAhead)
       .sort((a, b) => a.distance - b.distance);
-  }, [allOsmFeatures, gps.latitude, gps.longitude, gps.heading, settings.voiceOptions.hazardWarningDistanceMeters]);
+  }, [osmFeatures, gps.latitude, gps.longitude, gps.heading, settings.voiceOptions.hazardWarningDistanceMeters]);
+
+  // -------------------------------------------------------------
+  // Dynamic City Limit (Lakott terület) & 50m End Sign Retention
+  // "ha az osm van Lakot terölet tábla akkor amíg más infót nem kap addig jelezze
+  // a kresz tábla szerű településnevet ,ha nincs akkor sima szöveg és ha település vége
+  // akkor közeledéskor váltson a település vége (áthúzott) kresz táblára és még 50 mig jelezze ha elhagytuk"
+  // -------------------------------------------------------------
+  const lastPassedEndSignRef = useRef<{
+    cityName: string;
+    lat: number;
+    lon: number;
+    id: string;
+  } | null>(null);
+
+  const prevApproachingEndDistRef = useRef<Map<string, number>>(new Map());
+
+  // Check when an end sign is passed
+  useEffect(() => {
+    const endSigns = osmFeatures.filter(
+      (f) =>
+        f.type === 'city_limit' &&
+        (f.cityLimitType === 'end' || f.name.toLowerCase().includes('vége'))
+    );
+
+    for (const sign of endSigns) {
+      const dist = calculateDistanceMeters(
+        gps.latitude,
+        gps.longitude,
+        sign.latitude,
+        sign.longitude
+      );
+      const prevDist = prevApproachingEndDistRef.current.get(sign.id);
+      prevApproachingEndDistRef.current.set(sign.id, dist);
+
+      // If we are within 25 meters of the sign, record it as passed
+      if (dist <= 25) {
+        if (!lastPassedEndSignRef.current || lastPassedEndSignRef.current.id !== sign.id) {
+          lastPassedEndSignRef.current = {
+            cityName: sign.cityLimitName || sign.name,
+            lat: sign.latitude,
+            lon: sign.longitude,
+            id: sign.id,
+          };
+        }
+      }
+    }
+  }, [gps.latitude, gps.longitude, osmFeatures]);
+
+  // Reset passed end sign when simulation route changes
+  useEffect(() => {
+    lastPassedEndSignRef.current = null;
+    prevApproachingEndDistRef.current.clear();
+  }, [activeRouteKey, isSimulating]);
+
+  const cityLimitStatus = useMemo<CityLimitStatus>(() => {
+    // 1. Check if within 50m of passing a "település vége" sign
+    if (lastPassedEndSignRef.current) {
+      const passedDist = calculateDistanceMeters(
+        gps.latitude,
+        gps.longitude,
+        lastPassedEndSignRef.current.lat,
+        lastPassedEndSignRef.current.lon
+      );
+
+      if (passedDist <= 50) {
+        return {
+          isKreszSign: true,
+          isEnd: true,
+          cityName: lastPassedEndSignRef.current.cityName,
+          metersRemaining: Math.max(0, Math.round(50 - passedDist)),
+          mode: 'passed_end_50m',
+        };
+      } else {
+        // Exceeded 50m after leaving town
+        lastPassedEndSignRef.current = null;
+      }
+    }
+
+    // 2. Check if currently approaching an OSM city limit sign
+    const approachingCityLimit = nearbyOsmFeatures.find((f) => f.feature.type === 'city_limit');
+    if (approachingCityLimit) {
+      const isEnd =
+        approachingCityLimit.feature.cityLimitType === 'end' ||
+        approachingCityLimit.feature.name.toLowerCase().includes('vége');
+      const cityName =
+        approachingCityLimit.feature.cityLimitName || roadInfo.cityLimitName || roadInfo.city || 'Település';
+
+      return {
+        isKreszSign: true,
+        isEnd,
+        cityName,
+        mode: isEnd ? 'approaching_end' : 'approaching_start',
+      };
+    }
+
+    // 3. Settlement in OSM check: Does current town have a "Lakott terület" sign in OSM?
+    const currentCity = (roadInfo.city || '').trim();
+    const baseCity = currentCity
+      .replace(/\s+(?:[I|V|X]+|\d+)\.?\s*kerület.*/i, '')
+      .trim()
+      .toLowerCase();
+
+    const hasOsmTownSign = Boolean(
+      baseCity &&
+        osmFeatures.some((f) => {
+          if (f.type !== 'city_limit') return false;
+          const featName = (f.cityLimitName || f.name || '').toLowerCase();
+          return (
+            featName.includes(baseCity) ||
+            (f.cityLimitName && baseCity.includes(f.cityLimitName.toLowerCase()))
+          );
+        })
+    );
+
+    if (hasOsmTownSign) {
+      return {
+        isKreszSign: true,
+        isEnd: false,
+        cityName: roadInfo.city || 'Település',
+        mode: 'inside_city',
+      };
+    }
+
+    // 4. Default: No Lakott terület tábla in OSM -> plain text ("sima szöveg")
+    return {
+      isKreszSign: false,
+      isEnd: false,
+      cityName: roadInfo.city || '',
+      mode: 'none',
+    };
+  }, [
+    gps.latitude,
+    gps.longitude,
+    nearbyOsmFeatures,
+    osmFeatures,
+    roadInfo.city,
+    roadInfo.cityLimitName,
+  ]);
 
   // -------------------------------------------------------------
   // Real GPS Geolocation Watcher
@@ -607,36 +735,6 @@ export default function App() {
     setIsHazardModalOpen(true);
   };
 
-  const handleTriggerAddSign = useCallback(() => {
-    setIsSignModalOpen(true);
-  }, []);
-
-  const handleSaveSign = useCallback(
-    (newSign: OSMFeature) => {
-      setUserSigns((prev) => {
-        const next = [newSign, ...prev];
-        saveUserSigns(next);
-        return next;
-      });
-      audioAlertService.playTypeChime(newSign.type, settings.soundAlerts);
-      showToast(`🛑 ${newSign.name} sikeresen rögzítve!`);
-    },
-    [settings.soundAlerts, showToast]
-  );
-
-  const handleDeleteSign = useCallback(
-    (signId: string) => {
-      deleteUserSign(signId);
-      setUserSigns((prev) => prev.filter((s) => s.id !== signId));
-      showToast('🗑️ Tábla törölve.');
-    },
-    [showToast]
-  );
-
-  const handleAddSignAtLocation = useCallback((_lat: number, _lon: number) => {
-    setIsSignModalOpen(true);
-  }, []);
-
   const handleAddHazardAtLocation = useCallback(
     async (lat: number, lon: number, heading: number) => {
       let rName = roadInfo.roadName || 'Kijelölt útszakasz';
@@ -751,28 +849,17 @@ export default function App() {
         deletePrivateHazardNote(savedHazard.id);
       }
 
-      // 1. MINDIG azonnal elmentjük helyileg az eszközön, hogy soha semmilyen adat ne vesszen el!
-      setLocalHazards((prev) => {
-        const idx = prev.findIndex((h) => h.id === savedHazard.id);
-        if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = savedHazard;
-          return next;
-        }
-        return [savedHazard, ...prev];
-      });
-
-      // 2. Ha felhőbe töltést kért a felhasználó:
       if (saveToCloud) {
         if (!currentUser) {
-          // Ha nincs bejelentkezve, értesítjük és megnyitjuk az Auth modált, de az adat MÁR BIZTONSÁGBAN VAN helyben!
+          // If not logged in, prompt user to log in or save locally
           setIsAuthModalOpen(true);
-          showToast('💾 Úthiba elmentve ezen az eszközön! Jelentkezz be a felhőbe való online megosztáshoz.');
+          showToast('Jelentkezz be email címeddel a felhőbe töltéshez!');
           return;
         }
 
         try {
           await saveHazardToCloud(savedHazard, currentUser);
+          // Megtartjuk helyben is a privát megjegyzéssel és offline eléréssel
           setLocalHazards((prev) => {
             const idx = prev.findIndex((h) => h.id === savedHazard.id);
             if (idx >= 0) {
@@ -782,12 +869,22 @@ export default function App() {
             }
             return [{ ...savedHazard, isOnline: true }, ...prev];
           });
-          showToast('☁️ Úthiba sikeresen feltöltve a felhőbe!');
+          showToast('☁️ Úthiba feltöltve! (A megjegyzés csak offline a saját fiókodban maradt)');
         } catch (e) {
-          console.warn('Hiba a felhőbe töltéskor:', e);
-          showToast('⚠️ Hiba a felhőbe küldéskor, de a készüléken biztonságosan elmentve!');
+          showToast('Hiba a felhőbe mentéskor, helyileg mentve.');
+          setLocalHazards((prev) => [savedHazard, ...prev.filter((h) => h.id !== savedHazard.id)]);
         }
       } else {
+        // Save only locally
+        setLocalHazards((prev) => {
+          const idx = prev.findIndex((h) => h.id === savedHazard.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = savedHazard;
+            return next;
+          }
+          return [savedHazard, ...prev];
+        });
         showToast('💾 Úthiba elmentve ezen az eszközön.');
       }
     },
@@ -906,8 +1003,8 @@ export default function App() {
                 settings={settings}
                 approachingHazards={approachingHazards}
                 nearbyOsmFeatures={nearbyOsmFeatures}
+                cityLimitStatus={cityLimitStatus}
                 onTriggerRecordHazard={handleTriggerRecordHazard}
-                onTriggerAddSign={handleTriggerAddSign}
                 onOpenSettings={() => setIsSettingsOpen(true)}
               />
             </div>
@@ -918,15 +1015,13 @@ export default function App() {
                 key="split-map"
                 gps={gps}
                 hazards={activeHazards}
-                osmFeatures={allOsmFeatures}
+                osmFeatures={osmFeatures}
                 osmFeatureVisibility={settings.osmFeatures}
                 onToggleOsmFeatureVisibility={handleToggleOsmFeatureVisibility}
                 onAddHazardAtLocation={handleAddHazardAtLocation}
-                onAddSignAtLocation={handleAddSignAtLocation}
                 onSaveHazard={(h) => handleSaveHazard(h, Boolean(currentUser))}
                 onEditHazard={handleEditHazard}
                 onDeleteHazard={handleDeleteHazard}
-                onDeleteOsmFeature={handleDeleteSign}
                 onUpdateHazardPosition={handleUpdateHazardPosition}
                 onUpdateHazardHeading={handleUpdateHazardHeading}
                 theme={settings.theme}
@@ -944,8 +1039,8 @@ export default function App() {
               settings={settings}
               approachingHazards={approachingHazards}
               nearbyOsmFeatures={nearbyOsmFeatures}
+              cityLimitStatus={cityLimitStatus}
               onTriggerRecordHazard={handleTriggerRecordHazard}
-              onTriggerAddSign={handleTriggerAddSign}
               onOpenSettings={() => setIsSettingsOpen(true)}
             />
           </div>
@@ -958,15 +1053,13 @@ export default function App() {
               key="full-map"
               gps={gps}
               hazards={activeHazards}
-              osmFeatures={allOsmFeatures}
+              osmFeatures={osmFeatures}
               osmFeatureVisibility={settings.osmFeatures}
               onToggleOsmFeatureVisibility={handleToggleOsmFeatureVisibility}
               onAddHazardAtLocation={handleAddHazardAtLocation}
-              onAddSignAtLocation={handleAddSignAtLocation}
               onSaveHazard={(h) => handleSaveHazard(h, Boolean(currentUser))}
               onEditHazard={handleEditHazard}
               onDeleteHazard={handleDeleteHazard}
-              onDeleteOsmFeature={handleDeleteSign}
               onUpdateHazardPosition={handleUpdateHazardPosition}
               onUpdateHazardHeading={handleUpdateHazardHeading}
               theme={settings.theme}
@@ -1096,17 +1189,6 @@ export default function App() {
           }));
           setActiveTab('map');
         }}
-      />
-
-      {/* 8. Traffic Sign Recording Modal */}
-      <SignModal
-        isOpen={isSignModalOpen}
-        onClose={() => setIsSignModalOpen(false)}
-        onSaveSign={handleSaveSign}
-        onDeleteSign={handleDeleteSign}
-        userSigns={userSigns}
-        gps={gps}
-        roadInfo={roadInfo}
       />
     </div>
   );

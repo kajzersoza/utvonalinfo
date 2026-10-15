@@ -1,5 +1,5 @@
 import React from 'react';
-import { RoadInfo, GPSState, RoadHazard, AppSettings, OSMFeature } from '../types';
+import { RoadInfo, GPSState, RoadHazard, AppSettings, OSMFeature, CityLimitStatus } from '../types';
 import { getCardinalDirectionShort } from '../services/geoService';
 import { getHazardNameHungarian } from '../services/speechService';
 import {
@@ -15,8 +15,8 @@ interface CockpitViewProps {
   settings: AppSettings;
   approachingHazards: { hazard: RoadHazard; distance: number }[];
   nearbyOsmFeatures?: { feature: OSMFeature; distance: number }[];
+  cityLimitStatus?: CityLimitStatus;
   onTriggerRecordHazard: () => void;
-  onTriggerAddSign: () => void;
   onOpenSettings: () => void;
 }
 
@@ -26,8 +26,8 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
   settings,
   approachingHazards,
   nearbyOsmFeatures = [],
+  cityLimitStatus,
   onTriggerRecordHazard,
-  onTriggerAddSign,
 }) => {
   const { displayOptions, theme } = settings;
   const isDark = theme === 'dark';
@@ -55,7 +55,7 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
     : null;
 
   // -------------------------------------------------------------
-  // Speed limit & City Limit (Várostábla) calculations
+  // Speed limit & City Limit (Várostábla & Lakott terület) calculations
   // -------------------------------------------------------------
   const approachingSpeedSign = nearbyOsmFeatures.find(
     (f) =>
@@ -67,11 +67,34 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
     (f) => f.feature.type === 'city_limit'
   );
 
+  // Determine KRESZ sign vs plain text and End-of-city (áthúzott) status
+  const isKreszSign = cityLimitStatus
+    ? cityLimitStatus.isKreszSign
+    : Boolean(approachingCityLimit || roadInfo.isCityLimit);
+
+  const isCityEnd = cityLimitStatus
+    ? cityLimitStatus.isEnd
+    : (
+        approachingCityLimit?.feature.cityLimitType === 'end' ||
+        Boolean(approachingCityLimit?.feature.name?.toLowerCase().includes('vége'))
+      );
+
+  const displayCityName =
+    cityLimitStatus?.cityName ||
+    approachingCityLimit?.feature.cityLimitName ||
+    roadInfo.cityLimitName ||
+    roadInfo.city ||
+    'TELEPÜLÉS';
+
+  const isPassedEndGrace = cityLimitStatus?.mode === 'passed_end_50m';
+  const metersRemaining = cityLimitStatus?.metersRemaining;
+
   // Active speed limit: from approaching sign, or OSM roadInfo maxspeed, or standard Hungarian defaults
+  // In built-up area: 50 km/h; at or after city end: 90 km/h (or 130 on highway)
   const activeSpeedLimit =
     approachingSpeedSign?.feature.speedLimit ||
     roadInfo.maxspeed ||
-    (isHighway ? 130 : roadInfo.city ? 50 : 90);
+    (isCityEnd ? (isHighway ? 130 : 90) : (isKreszSign || roadInfo.city ? 50 : (isHighway ? 130 : 90)));
 
   const isSpeedExceeded = gps.speed > activeSpeedLimit + 3;
 
@@ -125,12 +148,11 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
       >
         {/* Left: 3-Row Layout (Postcode -> City/KRESZ sign -> Street/Road) */}
         <div className="flex-1 min-w-0 flex flex-col justify-between h-full py-0.5 overflow-hidden">
-          {/* 1. SOR: Irányítószám (Postcode) felül - MOBILON IS NAGYOBB BETŰKKEL */}
-          <div className="flex items-center text-sm sm:text-base md:text-lg font-mono font-bold tracking-wider text-amber-500/95 dark:text-amber-400 leading-none overflow-hidden shrink-0">
+          {/* 1. SOR: Irányítószám (Postcode) felül - Ikon nélkül, sötétebb sárga színnel, nagyobb betűkkel */}
+          <div className="flex items-center text-base sm:text-lg md:text-xl font-mono font-black tracking-wider leading-none overflow-hidden shrink-0">
             {displayOptions.showPostcode !== false && roadInfo.postcode ? (
-              <span className="truncate flex items-center gap-1.5">
-                <span className="text-sm sm:text-base">📮</span>
-                <span className="tracking-widest font-black text-sm sm:text-base md:text-lg">{roadInfo.postcode}</span>
+              <span className="truncate tracking-widest font-black text-base sm:text-lg md:text-xl text-amber-600 dark:text-amber-500">
+                {roadInfo.postcode}
               </span>
             ) : (
               <span className="text-xs sm:text-sm text-zinc-400 font-mono tracking-wider uppercase font-semibold">
@@ -139,27 +161,45 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
             )}
           </div>
 
-          {/* 2. SOR: Település neve - KRESZ tábla ha van az OSM-ben, sima szöveg ha nincs - MOBILON IS NAGYOBB BETŰKKEL */}
+          {/* 2. SOR: Település neve - KRESZ tábla ha van az OSM-ben (vagy városhatár tábla), sima szöveg ha nincs tábla az OSM-ben */}
           {displayOptions.showCity && (
             <div className="flex items-center overflow-hidden my-0.5 shrink-0">
-              {displayOptions.showCityLimitSign !== false &&
-              (approachingCityLimit || roadInfo.isCityLimit) ? (
+              {displayOptions.showCityLimitSign !== false && isKreszSign ? (
                 /* Magyar KRESZ Helységnévtábla: fehér alapon fekete keret, fekete vastag betűk */
-                <div
-                  className="inline-flex items-center px-3 py-1 rounded-[4px] bg-white border-2 sm:border-[2.5px] border-black text-black shadow-md shrink-0 max-w-full"
-                  title="KRESZ Helységnévtábla (Lakott terület - Megengedett legnagyobb sebesség: 50 km/h)"
-                >
-                  <span className="font-black text-base sm:text-lg md:text-xl lg:text-2xl tracking-wider uppercase font-sans text-black leading-none truncate">
-                    {approachingCityLimit?.feature.cityLimitName ||
-                      roadInfo.cityLimitName ||
-                      roadInfo.city ||
-                      'TELEPÜLÉS'}
-                  </span>
+                <div className="relative inline-flex items-center shrink-0 max-w-full">
+                  <div
+                    className="relative inline-flex items-center px-3 py-1 rounded-[4px] bg-white border-2 sm:border-[2.5px] border-black text-black shadow-md shrink-0 max-w-full overflow-hidden"
+                    title={
+                      isCityEnd
+                        ? 'KRESZ Lakott terület vége tábla (áthúzva - 50 méterig jelezve)'
+                        : 'KRESZ Helységnévtábla (Lakott terület - Megengedett legnagyobb sebesség: 50 km/h)'
+                    }
+                  >
+                    {/* Piros átlós áthúzás ha Lakott terület vége (áthúzott kresz tábla közeledéskor és elhagyás után még 50 méterig) */}
+                    {isCityEnd && (
+                      <div
+                        className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden"
+                        aria-hidden="true"
+                      >
+                        <div className="w-[130%] h-[3.5px] sm:h-[4.5px] bg-red-600 -rotate-12 transform origin-center shadow-sm" />
+                      </div>
+                    )}
+                    <span className={`font-black text-base sm:text-lg md:text-xl lg:text-2xl tracking-wider uppercase font-sans text-black leading-none truncate ${isCityEnd ? 'opacity-90' : ''}`}>
+                      {displayCityName}
+                    </span>
+                  </div>
+
+                  {/* 50m visszaszámláló jelzés ha a település vége táblát már elhagytuk */}
+                  {isPassedEndGrace && metersRemaining !== undefined && (
+                    <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-mono font-black bg-red-600 text-white shadow-sm leading-none shrink-0 animate-pulse">
+                      VÉGE ({metersRemaining}m)
+                    </span>
+                  )}
                 </div>
               ) : (
                 /* Sima településnév kiírás ha nincs tábla az OSM-ben */
-                <span className="text-2xl sm:text-3xl md:text-4xl font-black text-amber-400 tracking-tight leading-none truncate">
-                  {roadInfo.city || 'Helymeghatározás...'}
+                <span className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black text-amber-500 dark:text-amber-400 tracking-tight leading-none truncate">
+                  {displayCityName || 'Helymeghatározás...'}
                 </span>
               )}
             </div>
@@ -246,8 +286,16 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
             },
             {
               id: 'traffic_sign',
-              icon: approachingCityLimit ? '🏙️' : '🛑',
-              label: approachingCityLimit ? 'Településhatár tábla' : 'Közlekedési tábla',
+              icon: approachingCityLimit
+                ? (approachingCityLimit.feature.cityLimitType === 'end' || approachingCityLimit.feature.name.toLowerCase().includes('vége')
+                    ? '🏙️🚫'
+                    : '🏙️')
+                : '🛑',
+              label: approachingCityLimit
+                ? (approachingCityLimit.feature.cityLimitType === 'end' || approachingCityLimit.feature.name.toLowerCase().includes('vége')
+                    ? 'Lakott terület vége tábla'
+                    : 'Településhatár kezdete tábla')
+                : 'Közlekedési tábla',
               isEnabled:
                 settings.osmFeatures.showTrafficSigns || settings.osmFeatures.showCityLimits !== false,
               match:
@@ -450,44 +498,17 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
         )}
       </div>
 
-      {/* 5. Driver Quick-Record Buttons: Split into 2 parts (Left: Úthiba, Right: Tábla) with STRICT FIXED HEIGHT (h-16 sm:h-20) */}
-      <div className="pt-0.5 shrink-0 h-16 sm:h-20 max-h-16 sm:max-h-20 grid grid-cols-2 gap-2 sm:gap-3">
-        {/* Left: Original Hazard Recording */}
+      {/* 5. Giant Driver Quick-Record Button with STRICT FIXED HEIGHT (h-16 sm:h-20) */}
+      <div className="pt-0.5 shrink-0 h-16 sm:h-20 max-h-16 sm:max-h-20">
         <button
           type="button"
           onClick={onTriggerRecordHazard}
-          className="h-full rounded-2xl sm:rounded-3xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black shadow-xl shadow-red-600/30 border-2 border-white/30 flex items-center justify-center gap-1.5 sm:gap-3 transition-transform active:scale-97 cursor-pointer px-2 sm:px-3 overflow-hidden"
-          title="Úthiba rögzítése (Kátyú, csatornafedél, úthiba)"
+          className="w-full h-full rounded-3xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-2xl sm:text-3xl md:text-4xl shadow-2xl shadow-red-600/40 border-2 border-white/30 flex items-center justify-center gap-3 sm:gap-4 transition-transform active:scale-97 cursor-pointer"
         >
-          <AlertOctagon className="w-5 h-5 sm:w-8 sm:h-8 text-white animate-bounce shrink-0" />
-          <div className="flex flex-col items-start leading-tight text-left min-w-0">
-            <span className="tracking-tight drop-shadow-md text-xs sm:text-base md:text-lg font-black truncate w-full">
-              ÚTHIBA RÖGZÍTÉS
-            </span>
-            <span className="text-[10px] sm:text-xs opacity-85 font-medium hidden sm:inline">
-              Kátyú, hiba
-            </span>
-          </div>
-        </button>
-
-        {/* Right: Traffic Signs Recording (Speed limit / End, City limit start / end) */}
-        <button
-          type="button"
-          onClick={onTriggerAddSign}
-          className="h-full rounded-2xl sm:rounded-3xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white font-black shadow-xl shadow-indigo-600/30 border-2 border-white/30 flex items-center justify-center gap-1.5 sm:gap-3 transition-transform active:scale-97 cursor-pointer px-2 sm:px-3 overflow-hidden"
-          title="Táblák hozzáadása (Sebességkorlátozó, vége, település kezdete/vége)"
-        >
-          <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-white border-2 sm:border-3 border-red-600 flex items-center justify-center font-black text-red-600 text-[10px] sm:text-xs shadow-sm shrink-0">
-            50
-          </div>
-          <div className="flex flex-col items-start leading-tight text-left min-w-0">
-            <span className="tracking-tight drop-shadow-md text-xs sm:text-base md:text-lg font-black truncate w-full">
-              TÁBLA RÖGZÍTÉS
-            </span>
-            <span className="text-[10px] sm:text-xs opacity-85 font-medium hidden sm:inline">
-              Sebesség, Város
-            </span>
-          </div>
+          <AlertOctagon className="w-7 h-7 sm:w-9 sm:h-9 text-white animate-bounce shrink-0" />
+          <span className="tracking-tight text-center drop-shadow-md">
+            ÚTHIBA RÖGZÍTÉSE
+          </span>
         </button>
       </div>
     </div>

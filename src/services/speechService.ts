@@ -207,27 +207,22 @@ class SpeechService {
       label = 'forgalmi jelzőlámpa';
     } else if (feature.type === 'traffic_sign' && visibility.announceTrafficSigns) {
       shouldAnnounce = true;
-      const isEnd = (feature as any).isEnd || (feature as any).signCategory === 'speed_limit_end';
-      if (isEnd) {
-        label = feature.speedLimit
-          ? `${feature.speedLimit} kilométer per órás sebességkorlátozás vége`
-          : 'sebességkorlátozás vége';
-      } else if (feature.speedLimit && visibility.announceSpeedLimits !== false) {
+      if (feature.speedLimit && visibility.announceSpeedLimits !== false) {
         label = `sebességkorlátozás ${feature.speedLimit} kilométer per óra`;
       } else {
         label = feature.name;
       }
     } else if (feature.type === 'city_limit' && visibility.announceCityLimits !== false) {
       shouldAnnounce = true;
-      const isEnd = (feature as any).isEnd || (feature as any).signCategory === 'city_limit_end';
-      if (isEnd) {
-        label = feature.cityLimitName
-          ? `${feature.cityLimitName} település vége, lakott terület vége`
-          : 'település vége tábla, lakott terület vége';
+      const isEnd =
+        (feature as { cityLimitType?: string }).cityLimitType === 'end' ||
+        feature.name.toLowerCase().includes('vége');
+      if (feature.cityLimitName) {
+        label = isEnd
+          ? `${feature.cityLimitName} lakott terület vége`
+          : `${feature.cityLimitName} településhatár, lakott terület kezdete`;
       } else {
-        label = feature.cityLimitName
-          ? `${feature.cityLimitName} településhatár, lakott terület kezdete`
-          : 'településhatár tábla, lakott terület kezdete';
+        label = isEnd ? 'lakott terület vége tábla' : 'településhatár tábla, lakott terület kezdete';
       }
     }
 

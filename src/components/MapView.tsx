@@ -99,11 +99,9 @@ interface MapViewProps {
   osmFeatureVisibility: OSMFeatureVisibility;
   onToggleOsmFeatureVisibility: (key: keyof OSMFeatureVisibility) => void;
   onAddHazardAtLocation: (lat: number, lon: number, heading: number) => void;
-  onAddSignAtLocation?: (lat: number, lon: number) => void;
   onSaveHazard?: (hazard: RoadHazard) => void;
   onEditHazard: (hazard: RoadHazard) => void;
   onDeleteHazard: (id: string) => void;
-  onDeleteOsmFeature?: (id: string) => void;
   onUpdateHazardPosition: (id: string, lat: number, lon: number) => void;
   onUpdateHazardHeading: (id: string, heading: number) => void;
   theme: 'light' | 'dark';
@@ -148,11 +146,9 @@ export const MapView: React.FC<MapViewProps> = ({
   osmFeatureVisibility,
   onToggleOsmFeatureVisibility,
   onAddHazardAtLocation,
-  onAddSignAtLocation,
   onSaveHazard,
   onEditHazard,
   onDeleteHazard,
-  onDeleteOsmFeature,
   onUpdateHazardPosition,
   onUpdateHazardHeading,
   theme,
@@ -464,17 +460,14 @@ export const MapView: React.FC<MapViewProps> = ({
               </div>
             </div>
 
-            <div style="display: flex; gap: 6px; margin-bottom: 6px;">
-              <button id="btn-quick-place" type="button" style="flex: 1; padding: 7px 8px; background: #dc2626; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;">
-                ⚡ Úthiba
+            <div style="display: flex; gap: 6px;">
+              <button id="btn-quick-place" type="button" style="flex: 1; padding: 7px 10px; background: #dc2626; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                ⚡ Gyors Rögzítés
               </button>
-              <button id="btn-detail-place" type="button" style="flex: 1; padding: 7px 8px; background: #2563eb; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 11px; cursor: pointer;">
+              <button id="btn-detail-place" type="button" style="flex: 1; padding: 7px 10px; background: #2563eb; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 11px; cursor: pointer;">
                 ✏️ Részletek
               </button>
             </div>
-            <button id="btn-sign-place" type="button" style="width: 100%; padding: 6px 8px; background: #4f46e5; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;">
-              🛑 Közlekedési Tábla Elhelyezése
-            </button>
           </div>
         `;
 
@@ -556,19 +549,6 @@ export const MapView: React.FC<MapViewProps> = ({
             ev.preventDefault();
             map.closePopup(promptPopup);
             onAddHazardAtLocation(lat, lon, gps.heading || 0);
-          };
-        }
-
-        // Sign Place handler: opens SignModal at coordinates
-        const btnSign = promptDiv.querySelector<HTMLButtonElement>('#btn-sign-place');
-        if (btnSign) {
-          btnSign.onclick = (ev) => {
-            ev.stopPropagation();
-            ev.preventDefault();
-            map.closePopup(promptPopup);
-            if (onAddSignAtLocation) {
-              onAddSignAtLocation(lat, lon);
-            }
           };
         }
       });
@@ -772,144 +752,62 @@ export const MapView: React.FC<MapViewProps> = ({
       if (feat.type === 'traffic_sign' && !osmFeatureVisibility.showTrafficSigns) return;
       if (feat.type === 'city_limit' && osmFeatureVisibility.showCityLimits === false) return;
 
-      const isEnd = feat.isEnd || feat.signCategory === 'speed_limit_end' || feat.signCategory === 'city_limit_end';
-      const isCity = feat.type === 'city_limit';
+      const isCityEnd = feat.cityLimitType === 'end' || feat.name.toLowerCase().includes('vége');
 
-      let osmIconHtml = '';
-      let iconSize: [number, number] = [28, 28];
-      let iconAnchor: [number, number] = [14, 14];
+      const icon =
+        feat.type === 'crossing'
+          ? '🚶'
+          : feat.type === 'railway'
+          ? '🚂'
+          : feat.type === 'traffic_signals'
+          ? '🚦'
+          : feat.type === 'city_limit'
+          ? (isCityEnd ? '🏙️🚫' : '🏙️')
+          : '🛑';
 
-      if (isCity) {
-        iconSize = [48, 24];
-        iconAnchor = [24, 12];
-        const cityName = feat.cityLimitName || feat.name.replace(/lakott terület.*/i, '').trim() || 'VÁROS';
-        if (isEnd) {
-          osmIconHtml = `
-            <div style="position: relative; width: 48px; height: 24px; background: #ffffff; border: 2px solid #000000; border-radius: 4px; font-size: 9px; font-weight: 900; color: #374151; box-shadow: 0 2px 6px rgba(0,0,0,0.5); text-transform: uppercase; overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer;" title="${feat.name}">
-              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 42px;">${cityName}</span>
-              <div style="position: absolute; width: 60px; height: 3px; background: #dc2626; transform: rotate(-22deg);"></div>
-            </div>
-          `;
-        } else {
-          osmIconHtml = `
-            <div style="width: 48px; height: 24px; background: #ffffff; border: 2px solid #000000; border-radius: 4px; font-size: 9px; font-weight: 900; color: #000000; box-shadow: 0 2px 6px rgba(0,0,0,0.5); text-transform: uppercase; overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer;" title="${feat.name}">
-              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 42px;">${cityName}</span>
-            </div>
-          `;
-        }
-      } else if (feat.type === 'traffic_sign') {
-        if (isEnd) {
-          iconSize = [28, 28];
-          iconAnchor = [14, 14];
-          osmIconHtml = `
-            <div style="width: 28px; height: 28px; background: #ffffff; border: 2px solid #6b7280; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; color: #4b5563; box-shadow: 0 2px 6px rgba(0,0,0,0.5); cursor: pointer; position: relative; overflow: hidden;" title="${feat.name}">
-              <span>${feat.speedLimit || '⚡'}</span>
-              <div style="position: absolute; width: 36px; height: 2px; background: #1f2937; transform: rotate(-45deg);"></div>
-            </div>
-          `;
-        } else if (feat.speedLimit) {
-          iconSize = [28, 28];
-          iconAnchor = [14, 14];
-          osmIconHtml = `
-            <div style="width: 28px; height: 28px; background: #ffffff; border: 3px solid #dc2626; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; color: #000000; box-shadow: 0 2px 6px rgba(0,0,0,0.5); cursor: pointer;" title="${feat.name}">
-              ${feat.speedLimit}
-            </div>
-          `;
-        } else {
-          iconSize = [28, 28];
-          iconAnchor = [14, 14];
-          osmIconHtml = `
-            <div style="width: 28px; height: 28px; background: #18181b; border: 2px solid #ef4444; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); cursor: pointer;" title="${feat.name}">
-              🛑
-            </div>
-          `;
-        }
-      } else {
-        const icon =
-          feat.type === 'crossing'
-            ? '🚶'
-            : feat.type === 'railway'
-            ? '🚂'
-            : '🚦';
+      const borderColor =
+        feat.type === 'crossing'
+          ? '#3b82f6'
+          : feat.type === 'railway'
+          ? '#eab308'
+          : feat.type === 'traffic_signals'
+          ? '#10b981'
+          : feat.type === 'city_limit'
+          ? (isCityEnd ? '#ef4444' : '#a855f7')
+          : '#ef4444';
 
-        const borderColor =
-          feat.type === 'crossing'
-            ? '#3b82f6'
-            : feat.type === 'railway'
-            ? '#eab308'
-            : '#10b981';
-
-        iconSize = [28, 28];
-        iconAnchor = [14, 14];
-        osmIconHtml = `
-          <div style="width: 28px; height: 28px; background: #18181b; border: 2px solid ${borderColor}; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); cursor: pointer;" title="${feat.name}">
-            ${icon}
-          </div>
-        `;
-      }
+      const osmIconHtml = `
+        <div style="width: 28px; height: 28px; background: #18181b; border: 2px solid ${borderColor}; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); cursor: pointer;" title="${feat.name}">
+          ${icon}
+        </div>
+      `;
 
       const osmIcon = L.divIcon({
         html: osmIconHtml,
         className: 'osm-feature-icon',
-        iconSize,
-        iconAnchor,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
       });
 
       const marker = L.marker([feat.latitude, feat.longitude], { icon: osmIcon });
 
-      const popupDiv = document.createElement('div');
-      popupDiv.style.fontFamily = 'sans-serif';
-      popupDiv.style.fontSize = '12px';
-      popupDiv.style.minWidth = '190px';
-
-      popupDiv.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-          <span style="font-size: 18px;">${isCity ? '🏙️' : feat.type === 'traffic_sign' ? '🛑' : feat.type === 'crossing' ? '🚶' : feat.type === 'railway' ? '🚂' : '🚦'}</span>
-          <strong style="font-size: 13px; color: #111827;">${feat.name}</strong>
+      const popupHtml = `
+        <div style="font-family: sans-serif; font-size: 12px; min-width: 180px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+            <span style="font-size: 18px;">${icon}</span>
+            <strong style="font-size: 13px;">${feat.name}</strong>
+          </div>
+          <div style="color: #6b7280; font-size: 11px; margin-bottom: 4px;">
+            ${feat.description || 'OpenStreetMap közlekedési elem'}
+          </div>
+          ${feat.speedLimit ? `<div style="background: #fee2e2; color: #dc2626; padding: 2px 6px; border-radius: 4px; font-weight: bold; display: inline-block;">Sebességkorlát: ${feat.speedLimit} km/h</div>` : ''}
         </div>
-        <div style="color: #6b7280; font-size: 11px; margin-bottom: 6px;">
-          ${feat.description || 'Közlekedési elem'}
-        </div>
-        ${
-          feat.speedLimit
-            ? `<div style="background: #fee2e2; color: #dc2626; padding: 2px 6px; border-radius: 4px; font-weight: bold; display: inline-block; margin-bottom: 4px;">Sebesség: ${feat.speedLimit} km/h</div>`
-            : ''
-        }
-        ${
-          feat.userAdded
-            ? `
-              <div style="margin-top: 8px; border-top: 1px solid #e5e7eb; padding-top: 6px;">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-                  <span style="font-size: 10px; background: #e0e7ff; color: #4338ca; padding: 1px 5px; border-radius: 4px; font-weight: bold;">👤 Saját tábla</span>
-                </div>
-                <button id="btn-del-osm-${feat.id}" type="button" style="width: 100%; padding: 6px; background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;">
-                  🗑️ Tábla törlése
-                </button>
-              </div>
-            `
-            : ''
-        }
       `;
 
-      if (feat.userAdded) {
-        const delBtn = popupDiv.querySelector<HTMLButtonElement>(`#btn-del-osm-${feat.id}`);
-        if (delBtn) {
-          delBtn.onclick = (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            marker.closePopup();
-            osmGroup.removeLayer(marker);
-            if (onDeleteOsmFeature) {
-              onDeleteOsmFeature(feat.id);
-            }
-          };
-        }
-      }
-
-      marker.bindPopup(popupDiv);
+      marker.bindPopup(popupHtml);
       osmGroup.addLayer(marker);
     });
-  }, [osmFeatures, osmFeatureVisibility, onDeleteOsmFeature]);
+  }, [osmFeatures, osmFeatureVisibility]);
 
   // Recenter map on vehicle
   const handleRecenter = () => {

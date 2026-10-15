@@ -58,12 +58,6 @@ export interface UserProfile {
 
 export type OSMFeatureType = 'crossing' | 'railway' | 'traffic_signals' | 'traffic_sign' | 'city_limit';
 
-export type TrafficSignCategory =
-  | 'speed_limit'
-  | 'speed_limit_end'
-  | 'city_limit_start'
-  | 'city_limit_end';
-
 export interface OSMFeature {
   id: string;
   type: OSMFeatureType;
@@ -73,12 +67,15 @@ export interface OSMFeature {
   description?: string;
   speedLimit?: number;
   cityLimitName?: string;
-  signCategory?: TrafficSignCategory;
-  isEnd?: boolean; // Vége jelzés (sebességkorlátozás vége vagy település vége)
-  userAdded?: boolean; // Felhasználó által rögzített tábla
-  roadName?: string;
-  roadNumber?: string;
-  timestamp?: number;
+  cityLimitType?: 'start' | 'end'; // 'start': Lakott terület kezdete, 'end': Lakott terület vége
+}
+
+export interface CityLimitStatus {
+  isKreszSign: boolean; // True ha KRESZ helységnévtábla jelenik meg (lakott területen belül vagy közeledéskor/50m-en belül)
+  isEnd: boolean; // True ha Lakott terület vége (áthúzott piros sávval)
+  cityName: string; // A megjelenítendő településnév
+  metersRemaining?: number; // Ha elhagyás utáni 50m-en belül vagyunk, hány méter van még hátra
+  mode: 'approaching_start' | 'inside_city' | 'approaching_end' | 'passed_end_50m' | 'none';
 }
 
 export interface OSMFeatureVisibility {

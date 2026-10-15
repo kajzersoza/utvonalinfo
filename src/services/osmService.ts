@@ -54,10 +54,18 @@ export const SAMPLE_OSM_FEATURES: OSMFeature[] = [
   { id: 'osm-f-13', type: 'traffic_sign', name: 'Elsőbbségadás kötelező', latitude: 47.5040, longitude: 19.0390, description: 'Mackósajt tábla csomópontban' },
   { id: 'osm-f-14', type: 'traffic_sign', name: 'Sebességkorlátozás 90 km/h', latitude: 47.1940, longitude: 18.3500, description: 'Főúti sebességkorlátozás 90 tábla', speedLimit: 90 },
 
-  // Településhatár jelző táblák (Town boundary / City limit signs)
-  { id: 'osm-f-15', type: 'city_limit', name: 'Budapest városhatár tábla', latitude: 47.4620, longitude: 18.9950, cityLimitName: 'Budapest', speedLimit: 50, description: 'Budapest lakott terület kezdete (50 km/h)' },
-  { id: 'osm-f-16', type: 'city_limit', name: 'Budaörs városhatár tábla', latitude: 47.4580, longitude: 18.9810, cityLimitName: 'Budaörs', speedLimit: 50, description: 'Budaörs lakott terület kezdete (50 km/h)' },
-  { id: 'osm-f-17', type: 'city_limit', name: 'Várpalota városhatár tábla', latitude: 47.1915, longitude: 18.2800, cityLimitName: 'Várpalota', speedLimit: 50, description: 'Várpalota lakott terület kezdete (50 km/h)' },
+  // Településhatár jelző táblák (Town boundary / City limit signs - Lakott terület kezdete és vége táblák)
+  // Route 1 (Budapest Budaörsi út -> M7)
+  { id: 'osm-f-15-end', type: 'city_limit', name: 'Budapest lakott terület vége tábla', latitude: 47.4620, longitude: 18.9950, cityLimitName: 'Budapest', cityLimitType: 'end', speedLimit: 90, description: 'Budapest lakott terület vége (KRESZ áthúzott tábla)' },
+  { id: 'osm-f-16', type: 'city_limit', name: 'Budaörs városhatár tábla', latitude: 47.4585, longitude: 18.9810, cityLimitName: 'Budaörs', cityLimitType: 'start', speedLimit: 50, description: 'Budaörs lakott terület kezdete (50 km/h)' },
+  { id: 'osm-f-16-end', type: 'city_limit', name: 'Budaörs lakott terület vége tábla', latitude: 47.4520, longitude: 18.9600, cityLimitName: 'Budaörs', cityLimitType: 'end', speedLimit: 110, description: 'Budaörs lakott terület vége' },
+
+  // Route 2 (Budapest Belváros)
+  { id: 'osm-f-18', type: 'city_limit', name: 'Budapest városhatár tábla', latitude: 47.4910, longitude: 19.0415, cityLimitName: 'Budapest', cityLimitType: 'start', speedLimit: 50, description: 'Budapest lakott terület kezdete (50 km/h)' },
+
+  // Route 3 (8-as főút Várpalota)
+  { id: 'osm-f-17', type: 'city_limit', name: 'Várpalota városhatár tábla', latitude: 47.1910, longitude: 18.2800, cityLimitName: 'Várpalota', cityLimitType: 'start', speedLimit: 50, description: 'Várpalota lakott terület kezdete (50 km/h)' },
+  { id: 'osm-f-17-end', type: 'city_limit', name: 'Várpalota lakott terület vége tábla', latitude: 47.1865, longitude: 18.2200, cityLimitName: 'Várpalota', cityLimitType: 'end', speedLimit: 90, description: 'Várpalota lakott terület vége' },
 ];
 
 // In-memory cache for reverse geocode coordinates
@@ -308,6 +316,8 @@ export async function fetchNearbyOSMFeatures(
         let desc = '';
         let speedLimit: number | undefined;
 
+        let cityLimitType: 'start' | 'end' | undefined;
+
         if (tags.highway === 'crossing') {
           type = 'crossing';
           name = tags.crossing === 'zebra' ? 'Zebra gyalogátkelőhely' : (tags.name || 'Gyalogátkelőhely');
@@ -322,19 +332,34 @@ export async function fetchNearbyOSMFeatures(
           desc = 'Közúti csomóponti jelzőlámpa';
         } else if (tags.place && ['city', 'town', 'village', 'suburb', 'hamlet'].includes(tags.place)) {
           type = 'city_limit';
+          cityLimitType = 'start';
           const cityName = tags.name || tags['name:hu'] || tags.city || 'Település';
           name = `${cityName} városhatár (Településtábla)`;
           desc = `${cityName} lakott terület kezdete (50 km/h)`;
           speedLimit = 50;
         } else if (tags.traffic_sign || tags.highway === 'speed_camera' || tags.highway === 'stop' || tags.highway === 'give_way') {
-          // Check if this sign is a city limit sign
-          const signStr = String(tags.traffic_sign || '');
-          if (signStr.includes('city_limit') || signStr.includes('HU:C-01') || signStr.includes('village_limit')) {
+          // Check if this sign is a city limit sign (Lakott terület kezdete vagy vége)
+          const signStr = String(tags.traffic_sign || '').toLowerCase();
+          if (
+            signStr.includes('city_limit') ||
+            signStr.includes('hu:c-01') ||
+            signStr.includes('hu:c-001') ||
+            signStr.includes('hu:c-02') ||
+            signStr.includes('hu:c-002') ||
+            signStr.includes('village_limit')
+          ) {
             type = 'city_limit';
-            const cityName = tags.name || tags.city || 'Település';
-            name = `${cityName} városhatár tábla`;
-            desc = `${cityName} lakott terület tábla (50 km/h)`;
-            speedLimit = 50;
+            const isEnd =
+              signStr.includes('hu:c-02') ||
+              signStr.includes('hu:c-002') ||
+              signStr.includes('end') ||
+              signStr.includes('exit') ||
+              signStr.includes('vege');
+            cityLimitType = isEnd ? 'end' : 'start';
+            const cityName = tags.name || tags.city || tags['name:hu'] || 'Település';
+            name = isEnd ? `${cityName} lakott terület vége tábla` : `${cityName} városhatár tábla`;
+            desc = isEnd ? `${cityName} lakott terület vége` : `${cityName} lakott terület kezdete (50 km/h)`;
+            speedLimit = isEnd ? 90 : 50;
           } else {
             type = 'traffic_sign';
             if (tags.highway === 'speed_camera') {
@@ -377,6 +402,7 @@ export async function fetchNearbyOSMFeatures(
             description: desc,
             speedLimit,
             cityLimitName: type === 'city_limit' ? (tags.name || tags.city) : undefined,
+            cityLimitType,
           });
         }
       }

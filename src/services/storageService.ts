@@ -1,4 +1,4 @@
-import { AppSettings, RoadHazard, OSMFeature } from '../types';
+import { AppSettings, RoadHazard } from '../types';
 
 const HAZARDS_STORAGE_KEY = 'utinfo_road_hazards_v1';
 const SETTINGS_STORAGE_KEY = 'utinfo_settings_v1';
@@ -240,39 +240,5 @@ export function deletePrivateHazardNote(hazardId: string): void {
     }
   } catch (e) {
     console.error('Failed to delete private hazard note', e);
-  }
-}
-
-// -------------------------------------------------------------
-// Custom Traffic Signs Storage (User-recorded signs)
-// -------------------------------------------------------------
-const USER_SIGNS_STORAGE_KEY = 'utinfo_user_signs_v1';
-
-export function loadUserSigns(): OSMFeature[] {
-  try {
-    const raw = localStorage.getItem(USER_SIGNS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveUserSigns(signs: OSMFeature[]): void {
-  try {
-    localStorage.setItem(USER_SIGNS_STORAGE_KEY, JSON.stringify(signs));
-  } catch (e) {
-    console.error('Failed to save user signs', e);
-  }
-}
-
-export function deleteUserSign(signId: string): void {
-  try {
-    const current = loadUserSigns();
-    const updated = current.filter((s) => s.id !== signId);
-    saveUserSigns(updated);
-  } catch (e) {
-    console.error('Failed to delete user sign', e);
   }
 }

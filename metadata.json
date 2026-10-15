@@ -1,5 +1,5 @@
 {
-  "name": "Remix Remix ÚtInfó \u0026 Úthiba Rögzítő (OpenStreetMap)",
+  "name": "Remix ÚtInfó \u0026 Úthiba Rögzítő (OpenStreetMap)",
   "description": "Valós idejű OpenStreetMap alapú útvonal, sáv és úthiba rögzítő alkalmazás beszédhangos felolvasással és testreszabható műszerfallal.",
   "requestFramePermissions": [
     "geolocation"

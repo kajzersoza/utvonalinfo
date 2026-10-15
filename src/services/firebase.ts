@@ -15,8 +15,6 @@ import {
   doc,
   getDoc,
   getDocFromServer,
-  getDocs,
-  limit,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -93,8 +91,7 @@ export function handleFirestoreError(
 // Connection test on boot
 export async function testConnection(): Promise<boolean> {
   try {
-    const q = query(collection(db, 'roadHazards'), where('isPublic', '==', true), limit(1));
-    await getDocs(q);
+    await getDocFromServer(doc(db, 'test', 'connection'));
     return true;
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
