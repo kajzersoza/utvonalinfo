@@ -64,7 +64,7 @@ export default function App() {
   // 2. Firebase Cloud State & User Profile
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [cloudHazards, setCloudHazards] = useState<RoadHazard[]>([]);
-  const [filterMode, setFilterMode] = useState<HazardFilterMode>('all_online');
+  const [filterMode, setFilterMode] = useState<HazardFilterMode>('combined');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Toast helper
@@ -515,104 +515,164 @@ export default function App() {
   ]);
 
   // -------------------------------------------------------------
-  // Real GPS Geolocation Watcher
+  // Real GPS Geolocation Watcher with Auto-Recovery & Stable Refs
   // -------------------------------------------------------------
   const lastRealCoordsRef = useRef<{ lat: number; lon: number } | null>(null);
+
+  const checkApproachingHazardsRef = useRef(checkApproachingHazards);
+  checkApproachingHazardsRef.current = checkApproachingHazards;
+
+  const checkApproachingOsmFeaturesRef = useRef(checkApproachingOsmFeatures);
+  checkApproachingOsmFeaturesRef.current = checkApproachingOsmFeatures;
+
+  const fetchOnlineOsmRef = useRef(fetchOnlineOsm);
+  fetchOnlineOsmRef.current = fetchOnlineOsm;
+
+  const voiceOptionsRef = useRef(settings.voiceOptions);
+  voiceOptionsRef.current = settings.voiceOptions;
 
   useEffect(() => {
     if (isSimulating) return;
 
     if (!('geolocation' in navigator)) {
-      setGps((prev) => ({ ...prev, status: 'error', errorMessage: 'GPS nem támogatott' }));
+      setGps((prev) => ({ ...prev, status: 'error', errorMessage: 'GPS nem támogatott ebben a böngészőben' }));
       return;
     }
 
-    const watchId = navigator.geolocation.watchPosition(
-      async (pos) => {
-        const { latitude, longitude, speed, heading, accuracy } = pos.coords;
-        let finalHeading = heading ?? 0;
+    let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    let watchId: number | null = null;
 
-        // Fallback: calculate heading from previous location vector if speed > 3 km/h
-        if ((heading === null || isNaN(heading)) && lastRealCoordsRef.current) {
-          const dist = calculateDistanceMeters(
-            lastRealCoordsRef.current.lat,
-            lastRealCoordsRef.current.lon,
-            latitude,
-            longitude
-          );
-          if (dist > 5) {
-            finalHeading = calculateBearing(
-              lastRealCoordsRef.current.lat,
-              lastRealCoordsRef.current.lon,
+    const startWatching = () => {
+      try {
+        watchId = navigator.geolocation.watchPosition(
+          async (pos) => {
+            const { latitude, longitude, speed, heading, accuracy } = pos.coords;
+            let finalHeading = heading ?? 0;
+
+            // Fallback: calculate heading from previous location vector if speed > 3 km/h
+            if ((heading === null || isNaN(heading)) && lastRealCoordsRef.current) {
+              const dist = calculateDistanceMeters(
+                lastRealCoordsRef.current.lat,
+                lastRealCoordsRef.current.lon,
+                latitude,
+                longitude
+              );
+              if (dist > 5) {
+                finalHeading = calculateBearing(
+                  lastRealCoordsRef.current.lat,
+                  lastRealCoordsRef.current.lon,
+                  latitude,
+                  longitude
+                );
+              }
+            }
+            lastRealCoordsRef.current = { lat: latitude, lon: longitude };
+
+            const speedKmh = speed ? Math.max(0, speed * 3.6) : 0;
+
+            setGps({
               latitude,
-              longitude
-            );
+              longitude,
+              heading: finalHeading,
+              speed: speedKmh,
+              accuracy,
+              timestamp: pos.timestamp,
+              status: 'active',
+            });
+
+            // Check approaching hazards (Sound chimes & Speech)
+            checkApproachingHazardsRef.current(latitude, longitude, finalHeading);
+
+            // Check approaching OSM features (Crossings, railways, signals, signs)
+            checkApproachingOsmFeaturesRef.current(latitude, longitude, finalHeading);
+
+            // Automatically fetch nearby online OSM features in background
+            fetchOnlineOsmRef.current(latitude, longitude);
+
+            // Fetch OpenStreetMap reverse geocoded data (multi-engine Photon + Nominatim)
+            try {
+              const osm = await fetchOSMRoadInfo(latitude, longitude);
+              setRoadInfo((prev) => {
+                const hasValidCity =
+                  osm.city &&
+                  osm.city !== 'GPS pozíció alapján' &&
+                  osm.city !== 'Ismeretlen település';
+                const hasValidStreet =
+                  osm.roadName &&
+                  osm.roadName !== 'Jelenlegi útszakasz' &&
+                  osm.roadName !== 'Névtelen út';
+
+                return {
+                  ...prev,
+                  ...osm,
+                  city: hasValidCity ? osm.city : prev.city,
+                  postcode: osm.postcode || prev.postcode,
+                  roadName: hasValidStreet ? osm.roadName : prev.roadName,
+                  roadNumber: osm.roadNumber || prev.roadNumber,
+                  houseNumber: osm.houseNumber || prev.houseNumber,
+                  lanes: osm.lanes || prev.lanes,
+                  maxspeed: osm.maxspeed ?? prev.maxspeed,
+                };
+              });
+
+              // Trigger speech announcement if configured
+              speechService.announceRoadUpdate(
+                prevRoadInfoRef.current,
+                osm,
+                voiceOptionsRef.current
+              );
+              prevRoadInfoRef.current = osm;
+            } catch {
+              // Ignore transient network errors and keep current roadInfo intact
+            }
+          },
+          (err) => {
+            console.warn('Geolocation event:', err.code, err.message);
+            if (err.code === 1) {
+              // Permission denied
+              setGps((prev) => ({
+                ...prev,
+                status: 'error',
+                errorMessage: 'GPS hozzáférés megtagadva a böngészőben',
+              }));
+            } else {
+              // Temporary timeout or position unavailable - keep coordinates, set locating and auto-recover
+              setGps((prev) => ({
+                ...prev,
+                status: 'locating',
+                errorMessage: 'GPS jel keresése...',
+              }));
+
+              // Auto-recovery: restart watch in 3 seconds if connection dropped
+              if (retryTimeoutId) clearTimeout(retryTimeoutId);
+              retryTimeoutId = setTimeout(() => {
+                if (watchId !== null) {
+                  navigator.geolocation.clearWatch(watchId);
+                }
+                startWatching();
+              }, 3000);
+            }
+          },
+          {
+            enableHighAccuracy: settings.highAccuracyGPS,
+            timeout: 30000,
+            maximumAge: 10000,
           }
-        }
-        lastRealCoordsRef.current = { lat: latitude, lon: longitude };
-
-        const speedKmh = speed ? Math.max(0, speed * 3.6) : 0;
-
-        setGps({
-          latitude,
-          longitude,
-          heading: finalHeading,
-          speed: speedKmh,
-          accuracy,
-          timestamp: pos.timestamp,
-          status: 'active',
-        });
-
-        // Check approaching hazards (Sound chimes & Speech)
-        checkApproachingHazards(latitude, longitude, finalHeading);
-
-        // Check approaching OSM features (Crossings, railways, signals, signs - strictly heading & approaching only)
-        checkApproachingOsmFeatures(latitude, longitude, finalHeading);
-
-        // Automatically fetch nearby online OSM features in background
-        fetchOnlineOsm(latitude, longitude);
-
-        // Fetch OpenStreetMap reverse geocoded data
-        try {
-          const osm = await fetchOSMRoadInfo(latitude, longitude);
-          setRoadInfo(osm);
-
-          // Trigger speech announcement if configured
-          speechService.announceRoadUpdate(
-            prevRoadInfoRef.current,
-            osm,
-            settings.voiceOptions
-          );
-          prevRoadInfoRef.current = osm;
-        } catch {
-          // Ignore transient network errors
-        }
-      },
-      () => {
-        setGps((prev) => ({
-          ...prev,
-          status: 'error',
-          errorMessage: 'GPS hozzáférés megtagadva vagy nem elérhető',
-        }));
-      },
-      {
-        enableHighAccuracy: settings.highAccuracyGPS,
-        timeout: 15000,
-        maximumAge: 3000,
+        );
+      } catch (e) {
+        console.warn('Failed to start geolocation watch:', e);
       }
-    );
+    };
+
+    startWatching();
 
     return () => {
-      navigator.geolocation.clearWatch(watchId);
+      if (retryTimeoutId) clearTimeout(retryTimeoutId);
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+      }
     };
-  }, [
-    isSimulating,
-    settings.highAccuracyGPS,
-    settings.voiceOptions,
-    checkApproachingHazards,
-    checkApproachingOsmFeatures,
-    fetchOnlineOsm,
-  ]);
+  }, [isSimulating, settings.highAccuracyGPS]);
 
   // -------------------------------------------------------------
   // GPS Drive Simulation Timer
