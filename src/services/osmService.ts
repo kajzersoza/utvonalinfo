@@ -103,16 +103,10 @@ interface CacheEntry {
 const cache: CacheEntry[] = [];
 let lastFetchTime = 0;
 let lastFetchCoords: { lat: number; lon: number } | null = null;
+let lastResolvedRoadInfo: RoadInfo | null = null;
 
-let lastValidRoadInfo: RoadInfo = {
-  roadNumber: '7',
-  roadName: 'Budaörsi út',
-  houseNumber: '112.',
-  city: 'Budapest XI. kerület',
-  postcode: '1118',
-  lanes: 3,
-  source: 'osm',
-};
+// Track exact coordinates where a house number was resolved
+let lastHouseNumberOrigin: { lat: number; lon: number; houseNumber: string } | null = null;
 
 // Calculate distance in meters between two lat/lon coordinates
 export function calculateDistanceMeters(
@@ -199,24 +193,31 @@ function estimateDirectionalLanes(data: NominatimResponse): number {
 export async function fetchOSMRoadInfo(lat: number, lon: number): Promise<RoadInfo> {
   const now = Date.now();
 
-  // 1. Spatial cache check (80 meter radius, valid for 10 minutes)
-  const cached = cache.find((c) => calculateDistanceMeters(c.lat, c.lon, lat, lon) < 80);
-  if (cached && now - cached.timestamp < 600000) {
-    return { ...cached.info, source: 'cache' };
+  // 1. Throttle check: if vehicle moved less than 15m and queried less than 2000ms ago, return last resolved info
+  if (lastFetchCoords && lastResolvedRoadInfo) {
+    const moved = calculateDistanceMeters(lastFetchCoords.lat, lastFetchCoords.lon, lat, lon);
+    if (moved < 15 && now - lastFetchTime < 2000) {
+      // If user moved > 25m from the house, clear houseNumber even from memory
+      let houseNum = lastResolvedRoadInfo.houseNumber;
+      if (lastHouseNumberOrigin && calculateDistanceMeters(lastHouseNumberOrigin.lat, lastHouseNumberOrigin.lon, lat, lon) > 25) {
+        houseNum = undefined;
+      }
+      return { ...lastResolvedRoadInfo, houseNumber: houseNum, source: 'cache' };
+    }
   }
 
-  // 2. Throttle check: if vehicle moved less than 35m and queried less than 3000ms ago, return last valid info
-  if (lastFetchCoords) {
-    const moved = calculateDistanceMeters(lastFetchCoords.lat, lastFetchCoords.lon, lat, lon);
-    if (moved < 35 && now - lastFetchTime < 3000) {
-      return { ...lastValidRoadInfo, source: 'cache' };
-    }
+  // 2. Spatial cache check (25m radius, valid for 5 minutes)
+  const cached = cache.find((c) => calculateDistanceMeters(c.lat, c.lon, lat, lon) < 25);
+  if (cached && now - cached.timestamp < 300000) {
+    // Check house number proximity: only retain houseNumber if within 25m of that cached point
+    const houseNum = calculateDistanceMeters(cached.lat, cached.lon, lat, lon) <= 25 ? cached.info.houseNumber : undefined;
+    return { ...cached.info, houseNumber: houseNum, source: 'cache' };
   }
 
   lastFetchCoords = { lat, lon };
   lastFetchTime = now;
 
-  let resolvedInfo: Partial<RoadInfo> | null = null;
+  let resolvedInfo: RoadInfo | null = null;
 
   // 3. Primary Provider: Komoot Photon API (Extremely fast, generous rate limits, OpenStreetMap-based)
   try {
@@ -251,18 +252,22 @@ export async function fetchOSMRoadInfo(lat: number, lon: number): Promise<RoadIn
         const roadNum = extractRoadNumberFromText(street) || extractRoadNumberFromText(props.name || '');
         const isMotorway = props.osm_value === 'motorway' || props.osm_key === 'motorway';
 
-        if (city || street) {
-          resolvedInfo = {
-            roadNumber: roadNum || (isMotorway ? 'Autópálya' : ''),
-            roadName: street || 'Jelenlegi útszakasz',
-            houseNumber: houseNum,
-            city: city || 'Település',
-            postcode,
-            suburb: props.district,
-            lanes: isMotorway ? 3 : 2,
-            source: 'osm',
-          };
+        if (houseNum) {
+          lastHouseNumberOrigin = { lat, lon, houseNumber: houseNum };
+        } else {
+          lastHouseNumberOrigin = null;
         }
+
+        resolvedInfo = {
+          roadNumber: roadNum || (isMotorway ? 'Autópálya' : ''),
+          roadName: street,
+          houseNumber: houseNum,
+          city,
+          postcode,
+          suburb: props.district,
+          lanes: isMotorway ? 3 : 2,
+          source: 'osm',
+        };
       }
     }
   } catch {
@@ -270,7 +275,7 @@ export async function fetchOSMRoadInfo(lat: number, lon: number): Promise<RoadIn
   }
 
   // 4. Secondary Provider: OpenStreetMap Nominatim
-  if (!resolvedInfo || !resolvedInfo.city) {
+  if (!resolvedInfo) {
     try {
       const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&zoom=18&addressdetails=1&extratags=1`;
       const controller = new AbortController();
@@ -311,80 +316,63 @@ export async function fetchOSMRoadInfo(lat: number, lon: number): Promise<RoadIn
         const roadNumber = extractRoadNumber(data, roadName);
         const lanes = estimateDirectionalLanes(data);
         const maxspeed = data.extratags?.maxspeed ? parseInt(data.extratags.maxspeed, 10) : undefined;
+        const houseNum = houseNumber ? `${houseNumber}.` : undefined;
 
-        if (city || roadName) {
-          resolvedInfo = {
-            roadNumber: roadNumber || resolvedInfo?.roadNumber,
-            roadName: roadName || resolvedInfo?.roadName || 'Jelenlegi útszakasz',
-            houseNumber: houseNumber ? `${houseNumber}.` : resolvedInfo?.houseNumber,
-            city: city || resolvedInfo?.city || 'Település',
-            postcode: postcode || resolvedInfo?.postcode || '',
-            suburb: address.suburb || address.city_district || resolvedInfo?.suburb,
-            lanes: lanes || resolvedInfo?.lanes || 2,
-            maxspeed: isNaN(maxspeed as number) ? resolvedInfo?.maxspeed : maxspeed,
-            source: 'osm',
-            fullDisplayName: data.display_name,
-          };
+        if (houseNum) {
+          lastHouseNumberOrigin = { lat, lon, houseNumber: houseNum };
+        } else {
+          lastHouseNumberOrigin = null;
         }
+
+        resolvedInfo = {
+          roadNumber,
+          roadName,
+          houseNumber: houseNum,
+          city,
+          postcode,
+          suburb: address.suburb || address.city_district,
+          lanes,
+          maxspeed: isNaN(maxspeed as number) ? undefined : maxspeed,
+          source: 'osm',
+          fullDisplayName: data.display_name,
+        };
       }
     } catch {
       // Nominatim failed
     }
   }
 
-  // 5. If we resolved valid data from either provider:
+  // 5. If we resolved data from either provider:
   if (resolvedInfo) {
-    const hasValidCity =
-      resolvedInfo.city &&
-      resolvedInfo.city !== 'GPS pozíció alapján' &&
-      resolvedInfo.city !== 'Ismeretlen település';
-
-    const hasValidStreet =
-      resolvedInfo.roadName &&
-      resolvedInfo.roadName !== 'Jelenlegi útszakasz' &&
-      resolvedInfo.roadName !== 'Névtelen út';
-
-    // Merge with lastValidRoadInfo so we never drop a previously known postcode or city
-    const finalInfo: RoadInfo = {
-      roadNumber: resolvedInfo.roadNumber || (hasValidCity && resolvedInfo.city === lastValidRoadInfo.city ? lastValidRoadInfo.roadNumber : ''),
-      roadName: hasValidStreet ? resolvedInfo.roadName! : lastValidRoadInfo.roadName,
-      houseNumber: resolvedInfo.houseNumber || lastValidRoadInfo.houseNumber,
-      city: hasValidCity ? resolvedInfo.city! : lastValidRoadInfo.city,
-      postcode: resolvedInfo.postcode || (hasValidCity && resolvedInfo.city === lastValidRoadInfo.city ? lastValidRoadInfo.postcode : lastValidRoadInfo.postcode),
-      suburb: resolvedInfo.suburb || lastValidRoadInfo.suburb,
-      lanes: resolvedInfo.lanes || lastValidRoadInfo.lanes,
-      maxspeed: resolvedInfo.maxspeed ?? lastValidRoadInfo.maxspeed,
-      source: 'osm',
-      fullDisplayName: resolvedInfo.fullDisplayName || lastValidRoadInfo.fullDisplayName,
-    };
-
-    lastValidRoadInfo = finalInfo;
+    lastResolvedRoadInfo = resolvedInfo;
 
     // Cache the result
-    if (cache.length > 250) cache.shift();
-    cache.push({ lat, lon, info: finalInfo, timestamp: now });
+    if (cache.length > 100) cache.shift();
+    cache.push({ lat, lon, info: resolvedInfo, timestamp: now });
 
-    return finalInfo;
+    return resolvedInfo;
   }
 
-  // 6. Offline / Fail-safe Fallback:
-  // Find nearest cached entry within 2000m
-  let closest: CacheEntry | null = null;
-  let minD = 2000;
-  for (const c of cache) {
-    const d = calculateDistanceMeters(c.lat, c.lon, lat, lon);
-    if (d < minD) {
-      minD = d;
-      closest = c;
-    }
+  // 6. Fail-safe Fallback if network failed:
+  // Check if there is a cached point within 50 meters
+  const closeCache = cache.find((c) => calculateDistanceMeters(c.lat, c.lon, lat, lon) < 50);
+  if (closeCache) {
+    const houseNum = calculateDistanceMeters(closeCache.lat, closeCache.lon, lat, lon) <= 20 ? closeCache.info.houseNumber : undefined;
+    return { ...closeCache.info, houseNumber: houseNum, source: 'cache' };
   }
 
-  if (closest) {
-    return { ...closest.info, source: 'cache' };
-  }
-
-  // Return lastValidRoadInfo so UI NEVER disappears or shows blanks!
-  return { ...lastValidRoadInfo, source: 'cache' };
+  // If outside known area and no data found: fields are empty as requested!
+  const emptyInfo: RoadInfo = {
+    roadNumber: '',
+    roadName: '',
+    houseNumber: undefined,
+    city: '',
+    postcode: '',
+    lanes: 2,
+    source: 'cache',
+  };
+  lastResolvedRoadInfo = emptyInfo;
+  return emptyInfo;
 }
 
 // -------------------------------------------------------------

@@ -592,28 +592,8 @@ export default function App() {
             // Fetch OpenStreetMap reverse geocoded data (multi-engine Photon + Nominatim)
             try {
               const osm = await fetchOSMRoadInfo(latitude, longitude);
-              setRoadInfo((prev) => {
-                const hasValidCity =
-                  osm.city &&
-                  osm.city !== 'GPS pozíció alapján' &&
-                  osm.city !== 'Ismeretlen település';
-                const hasValidStreet =
-                  osm.roadName &&
-                  osm.roadName !== 'Jelenlegi útszakasz' &&
-                  osm.roadName !== 'Névtelen út';
-
-                return {
-                  ...prev,
-                  ...osm,
-                  city: hasValidCity ? osm.city : prev.city,
-                  postcode: osm.postcode || prev.postcode,
-                  roadName: hasValidStreet ? osm.roadName : prev.roadName,
-                  roadNumber: osm.roadNumber || prev.roadNumber,
-                  houseNumber: osm.houseNumber || prev.houseNumber,
-                  lanes: osm.lanes || prev.lanes,
-                  maxspeed: osm.maxspeed ?? prev.maxspeed,
-                };
-              });
+              // Set roadInfo directly so old data does not stick when leaving an area
+              setRoadInfo(osm);
 
               // Trigger speech announcement if configured
               speechService.announceRoadUpdate(
@@ -623,7 +603,7 @@ export default function App() {
               );
               prevRoadInfoRef.current = osm;
             } catch {
-              // Ignore transient network errors and keep current roadInfo intact
+              // Ignore transient network errors
             }
           },
           (err) => {

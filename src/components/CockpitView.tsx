@@ -129,10 +129,13 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
         : isHighway
         ? `${rawRoadNumber} Autópálya`
         : `${rawRoadNumber}. számú főút`;
-  } else if (rawStreet) {
+  } else if (rawStreet && rawStreet !== 'Névtelen út' && rawStreet !== 'Jelenlegi útszakasz keresése...') {
     streetRowTitle = rawStreet;
+  } else if (rawRoadNumber) {
+    streetRowTitle = rawRoadNumber;
   } else {
-    streetRowTitle = 'Országút / Jelenlegi útszakasz';
+    // Ha nem talál adatot, a mező legyen üres
+    streetRowTitle = '';
   }
 
   return (
@@ -148,74 +151,74 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
       >
         {/* Left: 3-Row Layout (Postcode -> City/KRESZ sign -> Street/Road) */}
         <div className="flex-1 min-w-0 flex flex-col justify-between h-full py-0.5 overflow-hidden">
-          {/* 1. SOR: Irányítószám (Postcode) felül - Ikon nélkül, sötétebb sárga színnel, nagyobb betűkkel */}
-          <div className="flex items-center text-base sm:text-lg md:text-xl font-mono font-black tracking-wider leading-none overflow-hidden shrink-0">
+          {/* 1. SOR: Irányítószám (Postcode) felül - Ha nincs adat, a mező üres */}
+          <div className="flex items-center text-base sm:text-lg md:text-xl font-mono font-black tracking-wider leading-none overflow-hidden shrink-0 min-h-[1.25rem]">
             {displayOptions.showPostcode !== false && roadInfo.postcode ? (
               <span className="truncate tracking-widest font-black text-base sm:text-lg md:text-xl text-amber-600 dark:text-amber-500">
                 {roadInfo.postcode}
               </span>
-            ) : (
-              <span className="text-xs sm:text-sm text-zinc-400 font-mono tracking-wider uppercase font-semibold">
-                GPS ÚTINFO
-              </span>
-            )}
+            ) : null}
           </div>
 
-          {/* 2. SOR: Település neve - KRESZ tábla ha van az OSM-ben (vagy városhatár tábla), sima szöveg ha nincs tábla az OSM-ben */}
+          {/* 2. SOR: Település neve - KRESZ tábla ha van az OSM-ben (vagy városhatár tábla), sima szöveg ha nincs tábla az OSM-ben, üres ha nincs adat */}
           {displayOptions.showCity && (
-            <div className="flex items-center overflow-hidden my-0.5 shrink-0">
-              {displayOptions.showCityLimitSign !== false && isKreszSign ? (
-                /* Magyar KRESZ Helységnévtábla: fehér alapon fekete keret, fekete vastag betűk */
-                <div className="relative inline-flex items-center shrink-0 max-w-full">
-                  <div
-                    className="relative inline-flex items-center px-3 py-1 rounded-[4px] bg-white border-2 sm:border-[2.5px] border-black text-black shadow-md shrink-0 max-w-full overflow-hidden"
-                    title={
-                      isCityEnd
-                        ? 'KRESZ Lakott terület vége tábla (áthúzva - 50 méterig jelezve)'
-                        : 'KRESZ Helységnévtábla (Lakott terület - Megengedett legnagyobb sebesség: 50 km/h)'
-                    }
-                  >
-                    {/* Piros átlós áthúzás ha Lakott terület vége (áthúzott kresz tábla közeledéskor és elhagyás után még 50 méterig) */}
-                    {isCityEnd && (
-                      <div
-                        className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden"
-                        aria-hidden="true"
-                      >
-                        <div className="w-[130%] h-[3.5px] sm:h-[4.5px] bg-red-600 -rotate-12 transform origin-center shadow-sm" />
-                      </div>
-                    )}
-                    <span className={`font-black text-base sm:text-lg md:text-xl lg:text-2xl tracking-wider uppercase font-sans text-black leading-none truncate ${isCityEnd ? 'opacity-90' : ''}`}>
-                      {displayCityName}
-                    </span>
-                  </div>
+            <div className="flex items-center overflow-hidden my-0.5 shrink-0 min-h-[1.75rem]">
+              {displayCityName ? (
+                displayOptions.showCityLimitSign !== false && isKreszSign ? (
+                  /* Magyar KRESZ Helységnévtábla: fehér alapon fekete keret, fekete vastag betűk */
+                  <div className="relative inline-flex items-center shrink-0 max-w-full">
+                    <div
+                      className="relative inline-flex items-center px-3 py-1 rounded-[4px] bg-white border-2 sm:border-[2.5px] border-black text-black shadow-md shrink-0 max-w-full overflow-hidden"
+                      title={
+                        isCityEnd
+                          ? 'KRESZ Lakott terület vége tábla (áthúzva - 50 méterig jelezve)'
+                          : 'KRESZ Helységnévtábla (Lakott terület - Megengedett legnagyobb sebesség: 50 km/h)'
+                      }
+                    >
+                      {/* Piros átlós áthúzás ha Lakott terület vége (áthúzott kresz tábla közeledéskor és elhagyás után még 50 méterig) */}
+                      {isCityEnd && (
+                        <div
+                          className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden"
+                          aria-hidden="true"
+                        >
+                          <div className="w-[130%] h-[3.5px] sm:h-[4.5px] bg-red-600 -rotate-12 transform origin-center shadow-sm" />
+                        </div>
+                      )}
+                      <span className={`font-black text-base sm:text-lg md:text-xl lg:text-2xl tracking-wider uppercase font-sans text-black leading-none truncate ${isCityEnd ? 'opacity-90' : ''}`}>
+                        {displayCityName}
+                      </span>
+                    </div>
 
-                  {/* 50m visszaszámláló jelzés ha a település vége táblát már elhagytuk */}
-                  {isPassedEndGrace && metersRemaining !== undefined && (
-                    <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-mono font-black bg-red-600 text-white shadow-sm leading-none shrink-0 animate-pulse">
-                      VÉGE ({metersRemaining}m)
-                    </span>
-                  )}
-                </div>
-              ) : (
-                /* Sima településnév kiírás ha nincs tábla az OSM-ben */
-                <span className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black text-amber-500 dark:text-amber-400 tracking-tight leading-none truncate">
-                  {displayCityName || 'Helymeghatározás...'}
-                </span>
-              )}
+                    {/* 50m visszaszámláló jelzés ha a település vége táblát már elhagytuk */}
+                    {isPassedEndGrace && metersRemaining !== undefined && (
+                      <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-mono font-black bg-red-600 text-white shadow-sm leading-none shrink-0 animate-pulse">
+                        VÉGE ({metersRemaining}m)
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  /* Sima településnév kiírás ha nincs tábla az OSM-ben */
+                  <span className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black text-amber-500 dark:text-amber-400 tracking-tight leading-none truncate">
+                    {displayCityName}
+                  </span>
+                )
+              ) : null}
             </div>
           )}
 
-          {/* 3. SOR: Alatta az utca ill. út száma - MOBILON IS NAGYOBB BETŰKKEL */}
+          {/* 3. SOR: Alatta az utca ill. út száma - MOBILON IS NAGYOBB BETŰKKEL, ha nincs adat, üres */}
           {displayOptions.showStreet && (
-            <div className="flex items-baseline gap-2 overflow-hidden shrink-0">
-              <h1 className="font-extrabold text-base sm:text-lg md:text-xl lg:text-2xl tracking-tight leading-snug truncate">
-                {streetRowTitle}
-              </h1>
-              {roadInfo.houseNumber && !isGenericOrHighway && (
+            <div className="flex items-baseline gap-2 overflow-hidden shrink-0 min-h-[1.5rem]">
+              {streetRowTitle ? (
+                <h1 className="font-extrabold text-base sm:text-lg md:text-xl lg:text-2xl tracking-tight leading-snug truncate">
+                  {streetRowTitle}
+                </h1>
+              ) : null}
+              {roadInfo.houseNumber && !isGenericOrHighway ? (
                 <span className="text-base sm:text-lg md:text-xl font-black text-cyan-400 shrink-0">
                   {roadInfo.houseNumber}
                 </span>
-              )}
+              ) : null}
             </div>
           )}
         </div>
